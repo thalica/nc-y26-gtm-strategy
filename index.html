@@ -545,6 +545,7 @@ html[lang="es"] .gtoday::after{content:"HOY";}
 .prow .pval{min-width:104px;white-space:nowrap;}
 .prow .pcount{display:inline-block;margin-right:10px;font-family:'IBM Plex Mono',monospace;
   font-size:12.5px;color:#61758C;font-variant-numeric:tabular-nums;}
+.sbnum{white-space:nowrap;}
 .sbfold{display:none;}
 .sbstamp{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#61758C;margin-top:14px;}
 .sbstamp .on{color:#1C9B5E;font-weight:600;} .sbstamp .off{color:#B7791F;font-weight:600;}
@@ -3394,14 +3395,14 @@ document.querySelectorAll('.exp-more').forEach(function(b){
         var t = hit.reduce(function(a,r){return a+n(r.target);},0);
         var a = hit.reduce(function(a2,r){return a2+n(r.achieved);},0);
         var td = tr.querySelectorAll('td');
-        if(td[1]) td[1].textContent = a + ' / ' + t;
-        if(cfg.progressCol && td[2]) td[2].textContent = (t?Math.round(a/t*100):0) + '%';
+        if(td[1]){ td[1].textContent = a + ' / ' + t; td[1].classList.add('sbnum'); }
+        if(cfg.progressCol && td[2]){ td[2].textContent = (t?Math.round(a/t*100):0) + '%'; td[2].classList.add('sbnum'); }
       });
       var tot = body.querySelector('tr.total');
       if(tot){
         var ttd = tot.querySelectorAll('td');
-        if(ttd[1]) ttd[1].textContent = achieved + ' / ' + target;
-        if(cfg.progressCol && ttd[2]) ttd[2].textContent = pct + '%';
+        if(ttd[1]){ ttd[1].textContent = achieved + ' / ' + target; ttd[1].classList.add('sbnum'); }
+        if(cfg.progressCol && ttd[2]){ ttd[2].textContent = pct + '%'; ttd[2].classList.add('sbnum'); }
         if(!cfg.progressCol && ttd[4]) ttd[4].textContent = srcs.length ? srcs.join(' + ') : 'No cash cost';
       }
     }
