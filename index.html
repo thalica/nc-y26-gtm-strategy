@@ -533,6 +533,31 @@ html[lang="es"] .gtoday::after{content:"HOY";}
 #ed-list .fld.dirty{border-color:var(--orange);}
 #ed-msg{font-size:12px;color:#7FD4FF;}
 @media print{#ed,#ed-open{display:none !important;}}
+
+/* ── scoreboards fed by the GTM tracking sheet ───────────────────────── */
+.sbtag{display:inline-block;margin-left:8px;padding:2px 9px;border-radius:99px;font-size:10px;
+  font-weight:700;letter-spacing:.05em;text-transform:uppercase;border:1px solid;white-space:nowrap;
+  vertical-align:middle;font-family:'Inter',sans-serif;}
+.sbtag.q3{background:#E8F3FC;border-color:#CDE4F6;color:#1B7FC4;}
+.sbtag.q4{background:#F3EFFA;border-color:#E2D8F3;color:#6B4FBB;}
+.sbtag.imc{background:#FDEEE2;border-color:#F8D8C2;color:#C9631F;}
+.sbtag.free{background:#EDF1F7;border-color:#DCE5F0;color:#61758C;}
+.prow .pval{min-width:104px;white-space:nowrap;}
+.prow .pcount{display:inline-block;margin-right:10px;font-family:'IBM Plex Mono',monospace;
+  font-size:12.5px;color:#61758C;font-variant-numeric:tabular-nums;}
+.sbfold{display:none;}
+.sbstamp{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#61758C;margin-top:14px;}
+.sbstamp .on{color:#1C9B5E;font-weight:600;} .sbstamp .off{color:#B7791F;font-weight:600;}
+
+/* ── pipeline: the current week, marked on every open ────────────────── */
+.gw.gw-now{color:#0077AA !important;font-weight:700;position:relative;}
+.band .gw.gw-now{color:#7FD4FF !important;}
+.gw.gw-now{color:#C23B3B !important;}
+.band .gw.gw-now{color:#FF8A8A !important;}
+.gw.gw-now::after{content:"";position:absolute;left:50%;transform:translateX(-50%);
+  bottom:2px;width:14px;height:2px;border-radius:2px;background:#C23B3B;}
+.gnow-note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#61758C;margin-top:8px;}
+.gnow-note b{color:#0077AA;}
 </style>
 </head><body>
 
@@ -936,15 +961,15 @@ html[lang="es"] .gtoday::after{content:"HOY";}
   </div></section>
 
   <!-- ---------- 06 SCOREBOARD ---------- -->
-  <section id="a-score"><div class="wrap">
+  <section id="a-score" data-sb="a-score"><div class="wrap">
     <div class="eyebrow" data-t="a6.eye">06 · Where execution actually stands</div>
     <h2 class="sec" data-t="a6.h">Execution scoreboard</h2>
-    <p class="lede" data-t="a6.lede">Thirteen deliverables logged across five workstreams. Three are complete — all of them webinars. Everything that generates leads on its own is still unfinished.</p>
+    <p class="lede" data-t="a6.lede">Every completed deliverable so far is a webinar. Everything that generates leads on its own — landing page, case study, ads and press — is still unfinished.</p>
     <div class="kpi-cubes">
-      <div class="kpi-cube t4"><div class="kv" data-t="a6.k1v">13</div><div class="kl" data-t="a6.k1l">Deliverables logged</div></div>
-      <div class="kpi-cube t3"><div class="kv" data-t="a6.k2v">3</div><div class="kl" data-t="a6.k2l">Live / confirmed complete</div></div>
-      <div class="kpi-cube t2"><div class="kv" data-t="a6.k3v">23%</div><div class="kl" data-t="a6.k3l">Completion — 3 of 13 deliverables</div></div>
-      <div class="kpi-cube t1"><div class="kv" data-t="a6.k4v">$2,800</div><div class="kl" data-t="a6.k4l">Total budget across Q3 + Q4 2026</div></div>
+      <div class="kpi-cube t4"><div class="kv">13</div><div class="kl" data-t="a6.k1l">Deliverables logged</div></div>
+      <div class="kpi-cube t3"><div class="kv">3</div><div class="kl" data-t="a6.k2l">Live / confirmed complete</div></div>
+      <div class="kpi-cube t2"><div class="kv">23%</div><div class="kl">Completion — 3 of 13 deliverables</div></div>
+      <div class="kpi-cube t1"><div class="kv">$2,800</div><div class="kl">Total budget across Q3 + Q4 2026</div></div>
     </div>
 
     <div class="mt-s" data-a6bars>
@@ -954,7 +979,7 @@ html[lang="es"] .gtoday::after{content:"HOY";}
       <div class="prow"><div class="pname" data-t="a6.p4n">Digital deliverables</div><div class="ptrack"><div class="pfill o" style="width:2%"></div></div><div class="pval">0%</div></div>
       <div class="prow"><div class="pname" data-t="a6.p5n">Paid media &amp; press</div><div class="ptrack"><div class="pfill o" style="width:2%"></div></div><div class="pval">0%</div></div>
     </div>
-    <p class="note" data-t="a6.pnote">Weighted average across the five workstreams: 29%. The headline 23% counts completed deliverables only (3 of 13); both figures are shown because they answer different questions.</p>
+    <p class="note" data-sbnote>Weighted average across the five workstreams: 29%. The headline 23% counts completed deliverables only (3 of 13); both figures are shown because they answer different questions.</p>
 
     <h4 class="mini" data-t="a6.m2">Deliverables, targets and budget</h4>
     <div class="table-wrap">
@@ -1306,16 +1331,17 @@ html[lang="es"] .gtoday::after{content:"HOY";}
   </div></section>
 
   <!-- ---------- 04 SCOREBOARD ---------- -->
-  <section id="b-score"><div class="wrap">
+  <section id="b-score" data-sb="b-score"><div class="wrap">
     <div class="eyebrow" data-t="b4.eye">04 · Where execution stands</div>
     <h2 class="sec" data-t="b4.h">Execution scoreboard and budget</h2>
-    <p class="lede" data-t="b4.lede">Seventeen deliverables logged across five workstreams, none of them started. The campaign launches in W38 — this is a plan waiting on a sample, not a plan in flight.</p>
+    <p class="lede" data-t="b4.lede">Five workstreams logged, none of them started. The campaign launches in W38 — this is a plan waiting on a sample, not a plan in flight.</p>
     <div class="kpi-cubes">
-      <div class="kpi-cube t4"><div class="kv" data-t="b4.k1v">17</div><div class="kl" data-t="b4.k1l">Deliverables logged</div></div>
-      <div class="kpi-cube t5"><div class="kv" data-t="b4.k2v">0</div><div class="kl" data-t="b4.k2l">Live / confirmed complete</div></div>
-      <div class="kpi-cube t2"><div class="kv" data-t="b4.k3v">0%</div><div class="kl" data-t="b4.k3l">Overall completion</div></div>
-      <div class="kpi-cube t1"><div class="kv" data-t="b4.k4v">$3,450</div><div class="kl" data-t="b4.k4l">Total budget · Q3 + Q4 + IMC</div></div>
+      <div class="kpi-cube t4"><div class="kv">17</div><div class="kl" data-t="b4.k1l">Deliverables logged</div></div>
+      <div class="kpi-cube t5"><div class="kv">0</div><div class="kl" data-t="b4.k2l">Live / confirmed complete</div></div>
+      <div class="kpi-cube t2"><div class="kv">0%</div><div class="kl">Overall completion</div></div>
+      <div class="kpi-cube t1"><div class="kv">$3,450</div><div class="kl">Total budget · Q3 + Q4 + IMC</div></div>
     </div>
+    <div class="mt-s" data-b4bars></div>
     <div class="table-wrap mt">
       <table class="exp-tbl folded">
         <thead><tr><th data-t="b4.th1">Workstream</th><th class="num" data-t="b4.th2">Done</th><th data-t="b4.th3">Target (ROI)</th><th class="num" data-t="b4.th4">Budget</th><th data-t="b4.th5">Source</th></tr></thead>
@@ -1669,15 +1695,15 @@ html[lang="es"] .gtoday::after{content:"HOY";}
   </div></section>
 
   <!-- ---------- 05 SCOREBOARD ---------- -->
-  <section id="c-score"><div class="wrap">
+  <section id="c-score" data-sb="c-score"><div class="wrap">
     <div class="eyebrow" data-t="c5.eye">05 · Where execution stands</div>
     <h2 class="sec" data-t="c5.h">Execution scoreboard and budget</h2>
-    <p class="lede" data-t="c5.lede">Twelve of 29 deliverables complete. Influencer and client content are ahead of plan; own social and product exposure have not started.</p>
+    <p class="lede" data-t="c5.lede">Influencer and client content are ahead of plan. Own social content has not started.</p>
     <div class="kpi-cubes">
-      <div class="kpi-cube t4"><div class="kv" data-t="c5.k1v">29</div><div class="kl" data-t="c5.k1l">Deliverables logged</div></div>
-      <div class="kpi-cube t3"><div class="kv" data-t="c5.k2v">12</div><div class="kl" data-t="c5.k2l">Live / confirmed complete</div></div>
-      <div class="kpi-cube t2"><div class="kv" data-t="c5.k3v">41%</div><div class="kl" data-t="c5.k3l">Completion — 12 of 29</div></div>
-      <div class="kpi-cube t1"><div class="kv" data-t="c5.k4v">$1,600</div><div class="kl" data-t="c5.k4l">Cash budget · the rest runs on IMC</div></div>
+      <div class="kpi-cube t4"><div class="kv">29</div><div class="kl" data-t="c5.k1l">Deliverables logged</div></div>
+      <div class="kpi-cube t3"><div class="kv">12</div><div class="kl" data-t="c5.k2l">Live / confirmed complete</div></div>
+      <div class="kpi-cube t2"><div class="kv">41%</div><div class="kl">Completion — 12 of 29</div></div>
+      <div class="kpi-cube t1"><div class="kv">$1,600</div><div class="kl">Cash budget · the rest runs on IMC</div></div>
     </div>
 
     <div class="mt-s" data-c5bars>
@@ -1685,7 +1711,6 @@ html[lang="es"] .gtoday::after{content:"HOY";}
       <div class="prow"><div class="pname" data-t="c5.p2n">Client content</div><div class="ptrack"><div class="pfill g" style="width:60%"></div></div><div class="pval">60%</div></div>
       <div class="prow"><div class="pname" data-t="c5.p3n">Paid ads</div><div class="ptrack"><div class="pfill" style="width:50%"></div></div><div class="pval">50%</div></div>
       <div class="prow"><div class="pname" data-t="c5.p4n">Own social content</div><div class="ptrack"><div class="pfill o" style="width:2%"></div></div><div class="pval">0%</div></div>
-      <div class="prow"><div class="pname" data-t="c5.p5n">Product exposure</div><div class="ptrack"><div class="pfill o" style="width:2%"></div></div><div class="pval">0%</div></div>
     </div>
 
     <h4 class="mini" data-t="c5.m2">Deliverables, targets and budget</h4>
@@ -1701,14 +1726,12 @@ html[lang="es"] .gtoday::after{content:"HOY";}
             <td class="num">5 / 10</td><td data-t="c5.r3t">1M views</td><td class="num">—</td><td data-t="c5.r3b">IMC budget</td></tr>
           <tr><td><strong data-t="c5.r4">Own social content</strong><span class="act-sub" data-t="c5.r4s">Three pieces planned for the AORUS channels in Colombia. Nothing posted yet.</span></td>
             <td class="num">0 / 3</td><td data-t="c5.r4t">10K views</td><td class="num">—</td><td data-t="c5.r4b">In-house</td></tr>
-          <tr><td><strong data-t="c5.r5">Product exposure</strong><span class="act-sub" data-t="c5.r5s">Monitor exhibitions with clients — the Scale phase. Not started.</span></td>
-            <td class="num">0 / 5</td><td data-t="c5.r5t">5 clients exhibiting</td><td class="num">—</td><td data-t="c5.r5b">Scale phase</td></tr>
           <tr class="total"><td data-t="c5.rt">Total</td><td class="num">12 / 29</td><td data-t="c5.rtt">1.3M views targeted</td><td class="num">$1,600</td><td data-t="c5.rtb">Q3 + Q4 + IMC</td></tr>
         </tbody>
       </table>
     </div>
     <button class="exp-more">See more</button>
-    <div class="callout mt" data-t="c5.call">Influencer and client content are on track with real results already reported. Paid ads are half-live. Own social and product exposure have not started — that is the gap to close before Activate ends in W45.</div>
+    <div class="callout mt" data-t="c5.call">Influencer and client content are on track with real results already reported. Paid ads are past the halfway mark. Own social content has not started — that is the gap to close before Activate ends in W45.</div>
   </div></section>
 
   <!-- ---------- 06 EXECUTED ---------- -->
@@ -3260,6 +3283,235 @@ document.querySelectorAll('.exp-more').forEach(function(b){
   open.addEventListener('click', function(){ show(true); });
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && ed.classList.contains('on')) show(false); });
   if(new URLSearchParams(location.search).get('edit') === '1') show(true);
+})();
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   EXECUTION SCOREBOARDS — fed by the GTM tracking sheet
+   Every number below (KPI cubes, bars, "Done" column, totals) is calculated
+   from the published Google Sheet. Nothing here is typed by hand.
+
+   To point a scoreboard at a different tab: change its `url`.
+   Sheets → File → Share → Publish to web → the tab → .csv
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  var PUB = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTROTRH_vsfOzO4jdOz2R2ernG4ts6sBkf95ekV0AOmrwkRCZ0njRExu3pynIpzYo_c58bBnWL2qM-8/pub';
+  var SB = {
+    'a-score': { url: PUB + '?output=csv',
+      bars:'[data-a6bars]', progressCol:true, note:true,
+      map:[['Webinar'],['Landing Page'],['Study Case'],['Digital Deliverables'],['Paid Media','Press Article']] },
+    'b-score': { url: PUB + '?gid=1344643068&single=true&output=csv',
+      bars:'[data-b4bars]', progressCol:false,
+      map:[['Client Content'],['Reviews'],['Paid Ads'],['Own Social Content'],['Press Note']] },
+    'c-score': { url: PUB + '?gid=1497025738&single=true&output=csv',
+      bars:'[data-c5bars]', progressCol:false,
+      map:[['Influencer / KOL'],['Social Content - Client'],['Paid Ads'],['Social Content - Own']] }
+  };
+
+  /* snapshot used if the sheet cannot be reached (offline, or opened as a file) */
+  var SNAP = {
+'a-score':'Item,Target,Achieved,Status,Budget,Deliverables,Source\nWebinar,4,3,In progress,0,"3 Webinars for Ecuador, 1 for NORTH CONE",-\nLanding Page,1,0,In progress,800,1 Landing Page,Q3 Budget\nStudy Case,1,0,In progress,0,1 Study Case,-\nDigital Deliverables,3,0,Not executed,0,"1 Flyer, 1 Story, 1 Webinar flyer",-\nPaid Media,2,0,Not executed,500,"1 Google Ads, 1 Meta Ads",IMC Budget\nPress Article,1,0,Not executed,1500,1 Media Article,Q3 Budget',
+'b-score':'Item,Target,Achieved,Status,Budget,Deliverables,Source\nClient Content,5,0,Not executed,0,5 Contents,-\nReviews,2,0,Not executed,1150,2 Reviews,Q4 Budget\nPaid Ads,6,0,Not executed,800,6 Boost in clients and own SM,IMC Budget\nOwn Social Content,3,0,Not executed,0,3 Own content on our SM,-\nPress Note,1,0,Not executed,1500,1 Press Note,Q3 Budget',
+'c-score':'Item,Target,Achieved,Status,Budget,Deliverables,Source\nInfluencer / KOL,1,1,Done,1500,1 Glogloking Video,Q3 Budget\nSocial Content - Client,10,6,In progress,100,"4 Peru Videos, 4 Colombia videos, 2 Ecuador Video",Q3 Budget\nSocial Content - Own,3,0,Not executed,0,3 Contents posted in Aorus Col and Latam,IMC Budget\nPaid Ads,10,6,In progress,0,10 Meta Ads for clients,-'
+  };
+
+  function parseCSV(t){
+    var rows=[],row=[],cell='',q=false;
+    for(var i=0;i<t.length;i++){ var c=t[i];
+      if(q){ if(c==='"'&&t[i+1]==='"'){cell+='"';i++;} else if(c==='"'){q=false;} else cell+=c; }
+      else if(c==='"'){q=true;}
+      else if(c===','){row.push(cell);cell='';}
+      else if(c==='\n'){row.push(cell);cell='';if(row.join('').trim())rows.push(row);row=[];}
+      else if(c!=='\r'){cell+=c;}
+    }
+    row.push(cell); if(row.join('').trim()) rows.push(row);
+    var head=rows.shift().map(function(h){return h.trim().toLowerCase();});
+    return rows.map(function(r){var o={};head.forEach(function(h,i){o[h]=(r[i]||'').trim();});return o;});
+  }
+  var n = function(v){ return Number(String(v).replace(/[^0-9.\-]/g,'')) || 0; };
+  var usd = function(v){ return '$' + v.toLocaleString('en-US'); };
+
+  function tag(src){
+    var s=(src||'').toLowerCase();
+    if(!src||src==='-')    return '<span class="sbtag free">No cash cost</span>';
+    if(s.indexOf('imc')>-1)return '<span class="sbtag imc">IMC budget</span>';
+    if(s.indexOf('q4')>-1) return '<span class="sbtag q4">Q4 budget</span>';
+    if(s.indexOf('q3')>-1) return '<span class="sbtag q3">Q3 budget</span>';
+    return '<span class="sbtag free">'+src+'</span>';
+  }
+
+  function paint(sec, cfg, rows, isLive){
+    var target   = rows.reduce(function(a,r){return a+n(r.target);},0);
+    var achieved = rows.reduce(function(a,r){return a+n(r.achieved);},0);
+    var budget   = rows.reduce(function(a,r){return a+n(r.budget);},0);
+    var pct      = target ? Math.round(achieved/target*100) : 0;
+    var srcs = rows.filter(function(r){return n(r.budget)>0;})
+                   .map(function(r){return r.source;})
+                   .filter(function(v,i,s){return s.indexOf(v)===i;});
+
+    /* KPI cubes */
+    var cubes = sec.querySelectorAll('.kpi-cube');
+    if(cubes.length>=4){
+      cubes[0].querySelector('.kv').textContent = target;
+      cubes[1].querySelector('.kv').textContent = achieved;
+      cubes[2].querySelector('.kv').textContent = pct + '%';
+      cubes[2].querySelector('.kl').textContent = 'Completion — ' + achieved + ' of ' + target + ' deliverables';
+      cubes[3].querySelector('.kv').textContent = usd(budget);
+      cubes[3].querySelector('.kl').textContent = 'Total budget · ' + (srcs.length ? srcs.join(' + ') : 'no cash cost');
+    }
+
+    /* bars */
+    var bars = sec.querySelector(cfg.bars);
+    if(bars){
+      bars.innerHTML = rows.map(function(r){
+        var t=n(r.target), a=n(r.achieved), p=t?Math.round(a/t*100):0;
+        var cls = p>=70 ? 'pfill g' : (p>=25 ? 'pfill' : 'pfill o');
+        return '<div class="prow">'
+          + '<div class="pname">'+r.item+tag(r.source)+'</div>'
+          + '<div class="ptrack"><div class="'+cls+'" style="width:'+(p>0?p:2)+'%"></div></div>'
+          + '<div class="pval"><span class="pcount">'+a+' / '+t+'</span>'+p+'%</div></div>';
+      }).join('');
+    }
+
+    /* note under the bars */
+    var note = sec.querySelector('[data-sbnote]');
+    if(note){
+      var avg = rows.length ? Math.round(rows.reduce(function(a,r){
+        return a + (n(r.target)? n(r.achieved)/n(r.target) : 0); },0)/rows.length*100) : 0;
+      note.textContent = 'Average across the ' + rows.length + ' workstreams: ' + avg + '%. The headline ' + pct +
+        '% counts deliverables (' + achieved + ' of ' + target + '); the average treats every workstream equally ' +
+        'regardless of how many deliverables it holds. Both are shown because they answer different questions.';
+    }
+
+    /* "Done" (and "Progress") cells in the folded table */
+    var body = sec.querySelector('table.exp-tbl tbody');
+    if(body){
+      var trs = Array.prototype.filter.call(body.children, function(tr){ return !tr.classList.contains('total'); });
+      cfg.map.forEach(function(names, i){
+        var tr = trs[i]; if(!tr) return;
+        var hit = rows.filter(function(r){ return names.indexOf(r.item)>-1; });
+        if(!hit.length) return;
+        var t = hit.reduce(function(a,r){return a+n(r.target);},0);
+        var a = hit.reduce(function(a2,r){return a2+n(r.achieved);},0);
+        var td = tr.querySelectorAll('td');
+        if(td[1]) td[1].textContent = a + ' / ' + t;
+        if(cfg.progressCol && td[2]) td[2].textContent = (t?Math.round(a/t*100):0) + '%';
+      });
+      var tot = body.querySelector('tr.total');
+      if(tot){
+        var ttd = tot.querySelectorAll('td');
+        if(ttd[1]) ttd[1].textContent = achieved + ' / ' + target;
+        if(cfg.progressCol && ttd[2]) ttd[2].textContent = pct + '%';
+        if(!cfg.progressCol && ttd[4]) ttd[4].textContent = srcs.length ? srcs.join(' + ') : 'No cash cost';
+      }
+    }
+
+    /* provenance stamp */
+    var wrap = sec.querySelector('.wrap') || sec;
+    var st = sec.querySelector('.sbstamp');
+    if(!st){ st = document.createElement('div'); st.className='sbstamp'; wrap.appendChild(st); }
+    st.innerHTML = 'Source: GTM tracking sheet · ' +
+      (isLive ? '<span class="on">live</span>' : '<span class="off">offline snapshot</span>') +
+      ' · updated ' + new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+    window.dispatchEvent(new Event('resize'));
+    if(sec.__sbLabel){ sec.__sbLabel(); setTimeout(sec.__sbLabel, 80); }
+  }
+
+  /* the workstream table stays closed until the button is pressed */
+  function collapse(sec){
+    var tbl = sec.querySelector('table.exp-tbl'); if(!tbl) return;
+    var wrap = tbl.closest('.table-wrap'); if(!wrap) return;
+    wrap.classList.add('sbfold');
+    var btn = sec.querySelector('.exp-more'); if(!btn) return;
+    var fresh = btn.cloneNode(true);          /* drops the page's own handler */
+    btn.parentNode.replaceChild(fresh, btn);
+    var label = function(){
+      fresh.textContent = wrap.classList.contains('sbfold')
+        ? 'See workstream detail' : 'Hide workstream detail';
+    };
+    sec.__sbLabel = label; label();
+    fresh.addEventListener('click', function(){
+      var open = wrap.classList.toggle('sbfold') === false;
+      if(open) tbl.classList.remove('folded');
+      label();
+      window.dispatchEvent(new Event('resize'));
+      setTimeout(label, 60);                  /* the page relabels on resize */
+    });
+  }
+
+  Object.keys(SB).forEach(function(id){
+    var sec = document.querySelector('[data-sb="'+id+'"]'); if(!sec) return;
+    var cfg = SB[id];
+    collapse(sec);
+    fetch(cfg.url, {cache:'no-store'})
+      .then(function(r){ if(!r.ok) throw 0; return r.text(); })
+      .then(function(t){ paint(sec, cfg, parseCSV(t), true); })
+      .catch(function(){ paint(sec, cfg, parseCSV(SNAP[id]), false); });
+  });
+})();
+</script>
+
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   PIPELINE — marks the current week every time the report is opened.
+   Reads the week numbers from each gantt header and highlights the column
+   matching today's ISO week. Nothing to maintain by hand.
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  function isoWeek(d){
+    var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    var day = t.getUTCDay() || 7;                 /* Monday = 1 … Sunday = 7 */
+    t.setUTCDate(t.getUTCDate() + 4 - day);       /* nearest Thursday        */
+    var jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return Math.ceil((((t - jan1) / 86400000) + 1) / 7);
+  }
+
+  function mark(){
+    var now = isoWeek(new Date());
+    document.querySelectorAll('.gantt').forEach(function(g){
+      var head = g.querySelector('.grow.head'); if(!head) return;
+      var weeks = Array.prototype.slice.call(head.querySelectorAll('.gw'));
+      if(!weeks.length) return;
+
+      weeks.forEach(function(w){ w.classList.remove('gw-now'); });
+      var old = g.parentNode.querySelector('.gnow-note'); if(old) old.remove();
+
+      var idx = -1;
+      weeks.forEach(function(w,i){ if(parseInt(w.textContent.replace(/\D/g,''),10) === now) idx = i; });
+
+      var line = g.querySelector('.gtoday');
+      if(idx > -1){
+        weeks[idx].classList.add('gw-now');
+        weeks[idx].title = 'Current week';
+        if(line){ line.style.gridColumn = (idx + 1); line.style.justifySelf = 'center'; }  /* move the report's own marker */
+        if(line) line.style.display = '';
+      } else {
+        if(line) line.style.display = 'none';           /* outside the window: no line */
+        var first = parseInt(weeks[0].textContent.replace(/\D/g,''),10);
+        var note = document.createElement('div');
+        note.className = 'gnow-note';
+        note.innerHTML = 'Current week: <b>W' + now + '</b> — ' +
+          (now < first ? 'this window has not started yet.' : 'this window has already closed.');
+        g.parentNode.insertBefore(note, g.nextSibling);
+      }
+    });
+
+    /* legend label: "Today · W36" → the real week */
+    document.querySelectorAll('b, span, i').forEach(function(el){
+      if(el.children.length) return;
+      var t = (el.textContent || '').trim();
+      if(/^(Today|Hoy)\s*·\s*W\d+$/.test(t))
+        el.textContent = t.split('·')[0].trim() + ' · W' + now;
+    });
+  }
+
+  mark();
+  window.addEventListener('load', mark);   /* after the page rebuilds its screens */
+  document.addEventListener('click', function(e){          /* EN / ES switch */
+    if(e.target.closest('[data-lang], .lang, .langsw')) setTimeout(mark, 150);
+  });
 })();
 </script>
 </body></html>
