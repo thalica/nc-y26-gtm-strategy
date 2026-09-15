@@ -4179,7 +4179,7 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
 
   var sb = null, rows = [], pending = null, expanded = {};
   var pop, mode = null, anchorEl = null, anchorRect = null, raf = null;
-  var btns = [], pinLayer, focusMark = null, focusTimer = null;
+  var btns = [], pinLayer, ghostLayer, focusMark = null, focusTimer = null;
 
   /* ---------- styles ---------- */
   var CSS = ''
@@ -4201,6 +4201,16 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
   + '.ncc-pin.on{background:#F26722;color:#fff;border-color:#F26722;}'
   + '.ncc-pin.done{border-color:rgba(140,140,150,.4);color:#8a8a95;}'
   + '.ncc-pin svg{width:13px;height:13px;display:block;}'
+  + '.ncc-add{position:absolute;pointer-events:auto;display:inline-flex;align-items:center;'
+  + 'justify-content:center;width:24px;height:24px;border-radius:50%;'
+  + 'border:1px solid rgba(242,103,34,.5);background:#fff;color:#F26722;cursor:pointer;'
+  + 'opacity:0;transition:opacity .12s,transform .12s,box-shadow .12s;'
+  + 'box-shadow:0 2px 7px rgba(15,20,40,.16);}'
+  + '.ncc-add svg{width:13px;height:13px;display:block;}'
+  + '.ncc-add.show{opacity:.72;}'
+  + '.ncc-add:hover{opacity:1;background:#F26722;color:#fff;border-color:#F26722;'
+  + 'transform:scale(1.1);box-shadow:0 5px 14px rgba(242,103,34,.32);}'
+  + '.ncc-add[hidden]{display:none;}'
 
   /* transient focus on the quoted text */
   + 'mark.ncc-focus{background:rgba(242,103,34,.30);color:inherit;border-radius:3px;'
@@ -4459,6 +4469,10 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     pinLayer.className = 'ncc-pins';
     document.body.appendChild(pinLayer);
 
+    ghostLayer = document.createElement('div');       /* separate: placePins() wipes pinLayer */
+    ghostLayer.className = 'ncc-pins';
+    document.body.appendChild(ghostLayer);
+
     pop = document.createElement('div');
     pop.className = 'ncc-pop';
     pop.hidden = true;
@@ -4608,20 +4622,20 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
 
     if(mode === 'thread' && pending && pending.thread){
       var t = rows.filter(function(r){ return r.id === pending.thread; })[0];
-      if(t){ h3.textContent = LABEL; bodyEl.innerHTML = threadHTML(t, true); count(); return; }
+      if(t){ h3.textContent = LABEL; bodyEl.innerHTML = threadHTML(t, true); count(); formVisible(); return; }
       close(); return;
     }
     if(mode === 'new'){
       h3.textContent = 'New feedback';
-      bodyEl.innerHTML = '<p class="ncc-empty">Your note will be pinned to the text you selected.</p>';
-      count(); return;
+      bodyEl.innerHTML = '<p class="ncc-empty">Your note will be pinned right here.</p>';
+      count(); formVisible(); return;
     }
 
     h3.textContent = LABEL;
     var tops = rows.filter(function(r){ return !r.parent_id; });
     if(!tops.length){
-      bodyEl.innerHTML = '<p class="ncc-empty">No feedback yet.<br><br>Select any text in the report and click <b>Comment</b>.</p>';
-      count(); return;
+      bodyEl.innerHTML = '<p class="ncc-empty">No feedback yet.<br><br>Hover over any paragraph, card or row and click the <b>+</b> that appears on the right.</p>';
+      count(); formVisible(); return;
     }
     tops.sort(function(a,b){
       if(a.resolved !== b.resolved) return a.resolved ? 1 : -1;
@@ -4629,6 +4643,14 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     });
     bodyEl.innerHTML = tops.map(function(t){ return threadHTML(t, false); }).join('');
     count();
+    formVisible();
+  }
+
+  /* in the inbox there is nothing to attach a comment to — hide the box
+     unless the user pressed Reply on a thread */
+  function formVisible(){
+    var f = pop.querySelector('.ncc-form');
+    f.hidden = (mode === 'list' && !(pending && pending.parent));
   }
 
   /* ---------- navigation ---------- */
@@ -4692,6 +4714,7 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
           pending = { thread: (pending && pending.thread) || t.dataset.reply,
                       parent: t.dataset.reply, parentName: t.dataset.who };
           paintCtx();
+          formVisible();
           pop.querySelector('.ncc-text').focus();
           return;
         }
@@ -4716,6 +4739,83 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
         schedulePins(500);
     });
     window.addEventListener('load', function(){ schedulePins(700); });
+  }
+
+  /* ---------- hover anywhere → "+" in the right margin ---------- */
+  var CBL = 'p, h2, h3, h4, li, td, .kpi-cube, .card, .callout, .note, .prow, .lede, .eyebrow';
+  var ghost = null, ghostEl = null, hideT = null;
+
+  function ensureGhost(){
+    if(ghost) return;
+    ghost = document.createElement('button');
+    ghost.type = 'button';
+    ghost.className = 'ncc-add';
+    ghost.title = 'Add feedback here';
+    ghost.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"'
+      + ' stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4'
+      + ' 8.9 8.9 0 0 1-4-.9L3 21l2-4.5A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg>';
+    ghost.hidden = true;
+    ghost.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(ghostEl) startOn(ghostEl, ghost.getBoundingClientRect());
+    });
+    ghostLayer.appendChild(ghost);
+  }
+
+  function hideGhost(){
+    if(!ghost) return;
+    ghost.classList.remove('show');
+    hideT = setTimeout(function(){ if(ghost) ghost.hidden = true; }, 140);
+    ghostEl = null;
+  }
+
+  function showGhost(el){
+    ensureGhost();
+    clearTimeout(hideT);
+    ghostEl = el;
+    var r = el.getBoundingClientRect();
+    if(r.width < 24 || r.height < 14) return hideGhost();
+    var x = Math.max(r.left + 2, r.right - 30);
+    var y = r.top + window.scrollY + (r.height > 46 ? 5 : (r.height - 24) / 2);
+    x = Math.max(6, Math.min(x, window.innerWidth - 34));
+    ghost.style.left = Math.round(x) + 'px';
+    ghost.style.top  = Math.round(y) + 'px';
+    ghost.hidden = false;
+    requestAnimationFrame(function(){ if(ghost) ghost.classList.add('show'); });
+  }
+
+  function startOn(el, rect){
+    var sec = el.closest('section[id]');
+    if(!sec) return;
+    var keyed = el.matches('[data-t]') ? el : el.closest('[data-t]');
+    var key = keyed ? keyed.getAttribute('data-t') : '';
+    var h = sec.querySelector('h2, h1');
+    var text = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    pending = {
+      quote: text,
+      section: sec.id + (key ? '#' + key : ''),
+      label: (h ? h.textContent : sec.id).replace(/\s+/g, ' ').trim().slice(0, 70)
+    };
+    paintCtx();
+    var r = rect || el.getBoundingClientRect();
+    open('new', null, { top:r.top, left:r.left, right:r.right, bottom:r.bottom });
+    render();
+    pop.querySelector('.ncc-text').focus();
+    hideGhost();
+  }
+
+  function initHover(){
+    ensureGhost();
+    document.addEventListener('mouseover', function(e){
+      var t = e.target;
+      if(!t || !t.closest) return;
+      if(t.closest('.ncc-pop, .ncc-bub, .ncc-pin, .ncc-add, nav, header')) return;
+      var el = t.closest(CBL);
+      if(!el || !el.closest('section[id]') || !(el.textContent || '').trim()){ hideGhost(); return; }
+      if(el.querySelector(CBL)) return;                 /* only the innermost block */
+      showGhost(el);
+    });
+    document.addEventListener('mouseleave', hideGhost);
   }
 
   /* selection → bubble → new comment */
@@ -4807,9 +4907,13 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
       pop.querySelector('.ncc-text').value = '';
       var keep = pending && pending.thread;
       if(keep) expanded[keep] = true;
+      var wasNew = mode === 'new';
       pending = keep ? { thread: keep } : null;
       paintCtx();
-      load().then(function(){ if(isOpen()){ render(); place(); } });
+      load().then(function(){
+        if(wasNew){ close(); return; }        /* the pin is there now — get out of the way */
+        if(isOpen()){ render(); place(); }
+      });
     });
   }
 
@@ -4889,7 +4993,7 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     s.src = LIB;
     s.onload = function(){
       sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
-      style(); build(); mountButtons(); initBubble(); wire();
+      style(); build(); mountButtons(); initBubble(); initHover(); wire();
       load();
       try {
         sb.channel('nc_comments_' + REPORT)
