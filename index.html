@@ -4152,12 +4152,12 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
 </script><!-- /NCX:PPT -->
 <!-- NCX:CMT --><script>
 /* ============================================================
-   NC GTM · Comments  —  read for everyone, write with a code.
-   Backend: Supabase (table nc_comments + RPC nc_add_comment).
+   NC GTM · Feedback  —  read for everyone, write with a code.
+   Backend: Supabase (table nc_comments + RPCs).
    The access code is NEVER in this file: it is checked inside
-   the database function, so nobody can read it from the source.
-   UI: a small popover next to the commented text, plus an inbox
-   dropdown under the nav button. Nothing covers the page.
+   the database functions, so nobody can read it from the source.
+   UI: a pin in the right margin of the commented block, and a
+   popover. Nothing stays fixed over the page.
    ============================================================ */
 (function(){
   'use strict';
@@ -4170,15 +4170,16 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
   var LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js';
   var REPORT = 'nc-gtm-plan';
   var LS_CODE = 'nc_cmt_code', LS_NAME = 'nc_cmt_name', LS_SEEN = 'nc_cmt_seen';
+  var LABEL = 'Feedback';
 
   if(SUPA_URL.indexOf('PASTE_') === 0){
-    console.warn('[comments] Supabase not configured — panel disabled.');
+    console.warn('[feedback] Supabase not configured — disabled.');
     return;
   }
 
-  var sb = null, rows = [], pending = null;
+  var sb = null, rows = [], pending = null, expanded = {};
   var pop, mode = null, anchorEl = null, anchorRect = null, raf = null;
-  var btns = [];
+  var btns = [], pinLayer, focusMark = null, focusTimer = null;
 
   /* ---------- styles ---------- */
   var CSS = ''
@@ -4190,48 +4191,78 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
   + 'background:#F26722;color:#fff;font-size:10px;line-height:16px;text-align:center;}'
   + '.ncc-btn .ncc-n[data-z="1"]{display:none;}'
 
+  /* margin pins */
+  + '.ncc-pins{position:absolute;inset:0;pointer-events:none;z-index:40;}'
+  + '.ncc-pin{position:absolute;pointer-events:auto;display:inline-flex;align-items:center;gap:3px;'
+  + 'height:26px;padding:0 8px 0 6px;border-radius:13px;border:1px solid rgba(242,103,34,.45);'
+  + 'background:#fff;color:#F26722;font:600 11px/1 system-ui,sans-serif;cursor:pointer;'
+  + 'box-shadow:0 2px 8px rgba(15,20,40,.13);transition:transform .12s,box-shadow .12s;}'
+  + '.ncc-pin:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(242,103,34,.28);}'
+  + '.ncc-pin.on{background:#F26722;color:#fff;border-color:#F26722;}'
+  + '.ncc-pin.done{border-color:rgba(140,140,150,.4);color:#8a8a95;}'
+  + '.ncc-pin svg{width:13px;height:13px;display:block;}'
+
+  /* transient focus on the quoted text */
+  + 'mark.ncc-focus{background:rgba(242,103,34,.30);color:inherit;border-radius:3px;'
+  + 'padding:0 2px;box-shadow:0 0 0 3px rgba(242,103,34,.16);}'
+
   /* popover */
-  + '.ncc-pop{position:fixed;z-index:9998;width:340px;max-width:calc(100vw - 24px);'
-  + 'background:#101014;border:1px solid #2a2a31;border-radius:12px;color:#e8e8ee;'
-  + 'font-family:system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 18px 44px rgba(0,0,0,.45);'
+  + '.ncc-pop{position:fixed;z-index:9998;width:358px;max-width:calc(100vw - 24px);'
+  + 'background:#101014;border:1px solid #2a2a31;border-radius:14px;color:#e8e8ee;'
+  + 'font-family:system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 20px 48px rgba(0,0,0,.48);'
   + 'display:flex;flex-direction:column;overflow:hidden;}'
   + '.ncc-pop[hidden]{display:none;}'
-  + '.ncc-hd{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid #24242b;flex:0 0 auto;}'
-  + '.ncc-hd h3{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#F26722;flex:1;}'
+  + '.ncc-hd{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #24242b;flex:0 0 auto;}'
+  + '.ncc-hd h3{margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#F26722;flex:1;}'
   + '.ncc-x{background:none;border:0;color:#8a8a95;font-size:19px;line-height:1;cursor:pointer;padding:0 2px;}'
   + '.ncc-x:hover{color:#fff;}'
-  + '.ncc-body{flex:1 1 auto;overflow-y:auto;max-height:46vh;padding:10px 12px;}'
+  + '.ncc-body{flex:1 1 auto;overflow-y:auto;max-height:48vh;padding:10px 12px;}'
   + '.ncc-empty{color:#6e6e78;font-size:11.5px;line-height:1.6;padding:8px 2px;}'
 
-  /* threads */
-  + '.ncc-th{border:1px solid #26262e;border-radius:9px;padding:9px 10px;margin-bottom:8px;background:#16161b;}'
+  /* thread cards */
+  + '.ncc-th{position:relative;border-radius:10px;padding:10px 11px;margin-bottom:8px;'
+  + 'background:#16161b;border:1px solid #26262e;cursor:pointer;}'
   + '.ncc-th:last-child{margin-bottom:0;}'
-  + '.ncc-th.done{opacity:.5;}'
-  + '.ncc-th.hit{border-color:#F26722;}'
-  + '.ncc-sec{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:#6e6e78;margin-bottom:4px;cursor:pointer;}'
-  + '.ncc-sec:hover{color:#F26722;}'
-  + '.ncc-q{border-left:2px solid #F26722;padding:1px 0 1px 7px;margin:0 0 6px;color:#9a9aa2;font-size:10.5px;'
+  + '.ncc-th:hover{border-color:#3a3a45;}'
+  + '.ncc-th.done{opacity:.52;}'
+  + '.ncc-th.lead{background:#1b1b22;border-color:#F26722;padding:12px 13px;cursor:default;}'
+  + '.ncc-th.lead .ncc-msg{font-size:14px;line-height:1.55;}'
+  + '.ncc-top{display:flex;align-items:center;gap:7px;margin-bottom:6px;}'
+  + '.ncc-av{width:22px;height:22px;border-radius:50%;flex:0 0 auto;color:#fff;'
+  + 'font:700 9.5px/22px system-ui,sans-serif;text-align:center;letter-spacing:.02em;}'
+  + '.ncc-th.lead .ncc-av{width:26px;height:26px;line-height:26px;font-size:11px;}'
+  + '.ncc-who{color:#e8e8ee;font-weight:600;font-size:12px;}'
+  + '.ncc-time{color:#6e6e78;font-size:10.5px;}'
+  + '.ncc-new{background:#F26722;color:#fff;border-radius:4px;padding:1px 4px;font-size:8.5px;font-weight:700;letter-spacing:.06em;}'
+  + '.ncc-sp{flex:1;}'
+  + '.ncc-del{background:none;border:0;color:#5c5c66;cursor:pointer;font-size:10.5px;padding:2px 5px;border-radius:5px;font-family:inherit;}'
+  + '.ncc-del:hover{color:#ff6b6b;background:rgba(255,107,107,.1);}'
+  + '.ncc-del[data-armed="1"]{color:#ff6b6b;background:rgba(255,107,107,.14);font-weight:600;}'
+  + '.ncc-sec{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:#6e6e78;margin:0 0 5px;}'
+  + '.ncc-q{border-left:2px solid #F26722;padding:1px 0 1px 7px;margin:0 0 7px;color:#9a9aa2;font-size:10.5px;'
   + 'font-style:italic;line-height:1.45;}'
-  + '.ncc-msg{font-size:12.5px;line-height:1.5;margin:0 0 5px;white-space:pre-wrap;word-break:break-word;}'
-  + '.ncc-meta{font-size:10px;color:#6e6e78;display:flex;gap:7px;align-items:center;flex-wrap:wrap;}'
-  + '.ncc-who{color:#b9b9c4;font-weight:600;}'
-  + '.ncc-new{background:#F26722;color:#fff;border-radius:4px;padding:0 4px;font-size:8.5px;font-weight:700;letter-spacing:.06em;}'
-  + '.ncc-rep{margin:8px 0 0 8px;padding-left:9px;border-left:1px solid #2a2a31;}'
-  + '.ncc-rep .ncc-msg{font-size:12px;}'
-  + '.ncc-act{margin-top:8px;display:flex;gap:7px;}'
-  + '.ncc-act button{background:none;border:1px solid #2e2e36;color:#8a8a95;border-radius:6px;'
-  + 'padding:3px 9px;font-size:10.5px;cursor:pointer;font-family:inherit;}'
+  + '.ncc-msg{font-size:12.5px;line-height:1.5;margin:0;white-space:pre-wrap;word-break:break-word;color:#e8e8ee;}'
+  + '.ncc-act{margin-top:9px;display:flex;gap:7px;align-items:center;}'
+  + '.ncc-act button{background:none;border:1px solid #2e2e36;color:#8a8a95;border-radius:14px;'
+  + 'padding:3px 11px;font-size:10.5px;cursor:pointer;font-family:inherit;}'
   + '.ncc-act button:hover{border-color:#F26722;color:#F26722;}'
+  + '.ncc-more{background:none;border:0;color:#8a8a95;font-size:11px;cursor:pointer;padding:7px 0 0;font-family:inherit;}'
+  + '.ncc-more:hover{color:#F26722;}'
+  + '.ncc-reps{margin-top:9px;padding-left:10px;border-left:1px solid #2a2a31;}'
+  + '.ncc-reps[hidden]{display:none;}'
+  + '.ncc-rep{margin-bottom:9px;}'
+  + '.ncc-rep:last-child{margin-bottom:0;}'
+  + '.ncc-rep .ncc-msg{font-size:12px;color:#b9b9c4;}'
 
   /* composer */
   + '.ncc-form{flex:0 0 auto;border-top:1px solid #24242b;padding:10px 12px 12px;background:#0d0d11;}'
   + '.ncc-form input,.ncc-form textarea{width:100%;box-sizing:border-box;background:#17171d;color:#e8e8ee;'
-  + 'border:1px solid #2a2a31;border-radius:7px;padding:7px 9px;font-size:12px;font-family:inherit;margin-bottom:6px;}'
+  + 'border:1px solid #2a2a31;border-radius:8px;padding:8px 10px;font-size:12px;font-family:inherit;margin-bottom:6px;}'
   + '.ncc-form textarea{min-height:56px;resize:vertical;}'
   + '.ncc-form input:focus,.ncc-form textarea:focus{outline:0;border-color:#F26722;}'
   + '.ncc-row{display:flex;gap:6px;}'
-  + '.ncc-row input{margin-bottom:6px;}'
-  + '.ncc-send{width:100%;background:#F26722;border:0;color:#fff;border-radius:7px;padding:8px;'
+  + '.ncc-row[hidden]{display:none;}'
+  + '.ncc-send{width:100%;background:#F26722;border:0;color:#fff;border-radius:8px;padding:9px;'
   + 'font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}'
   + '.ncc-send:disabled{opacity:.5;cursor:default;}'
   + '.ncc-err{color:#ff6b6b;font-size:11px;margin:0 0 6px;line-height:1.45;}'
@@ -4241,24 +4272,15 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
   + '.ncc-as[hidden]{display:none;}'
   + '.ncc-as b{color:#b9b9c4;}'
   + '.ncc-as a{color:#F26722;text-decoration:none;}'
-  + '.ncc-row[hidden]{display:none;}'
   + '.ncc-ctx{font-size:10.5px;color:#F26722;margin:0 0 6px;display:flex;gap:6px;align-items:flex-start;line-height:1.4;}'
   + '.ncc-ctx[hidden]{display:none;}'
   + '.ncc-ctx button{background:none;border:0;color:#6e6e78;cursor:pointer;font-size:13px;line-height:1;padding:0;}'
 
-  /* selection bubble + inline marks */
-  + '.ncc-bub{position:absolute;z-index:9999;background:#F26722;color:#fff;border:0;border-radius:7px;'
+  /* selection bubble */
+  + '.ncc-bub{position:absolute;z-index:9999;background:#F26722;color:#fff;border:0;border-radius:8px;'
   + 'padding:6px 11px;font-size:11.5px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);'
   + 'font-family:system-ui,sans-serif;}'
-  + '.ncc-flash{background:rgba(242,103,34,.28)!important;transition:background .4s;}'
-  + 'mark.ncc-hl{background:rgba(242,103,34,.18);color:inherit;border-bottom:2px solid #F26722;'
-  + 'border-radius:2px;padding:0 1px;cursor:pointer;}'
-  + 'mark.ncc-hl:hover{background:rgba(242,103,34,.36);}'
-  + 'mark.ncc-hl.on{background:rgba(242,103,34,.36);}'
-  + 'mark.ncc-hl::after{content:attr(data-n);font-size:9px;font-weight:700;color:#F26722;'
-  + 'vertical-align:super;margin-left:2px;line-height:0;}'
-  + 'mark.ncc-hl.done{background:rgba(130,130,140,.16);border-bottom-color:#9a9aa2;}'
-  + 'mark.ncc-hl.done::after{color:#9a9aa2;}'
+  + '@media(max-width:900px){.ncc-pin{height:22px;padding:0 6px 0 5px;font-size:10px;}}'
   + '@media(max-width:640px){.ncc-pop{width:calc(100vw - 20px);} .ncc-body{max-height:40vh;}}';
 
   function style(){
@@ -4276,15 +4298,29 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
   function ago(iso){
     var d = (Date.now() - new Date(iso).getTime()) / 1000;
     if(d < 60) return 'just now';
-    if(d < 3600) return Math.floor(d/60) + 'm';
-    if(d < 86400) return Math.floor(d/3600) + 'h';
-    if(d < 604800) return Math.floor(d/86400) + 'd';
+    if(d < 3600) return Math.floor(d/60) + ' min ago';
+    if(d < 86400) return Math.floor(d/3600) + ' h ago';
+    if(d < 604800) return Math.floor(d/86400) + ' d ago';
     return new Date(iso).toLocaleDateString();
+  }
+  function initials(name){
+    var p = String(name || 'A').trim().split(/\s+/);
+    return ((p[0] || 'A')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
+  }
+  var AVC = ['#F26722','#00A0E6','#27C26E','#8B5CF6','#E0245E','#F4B400','#14B8A6'];
+  function avColor(name){
+    var h = 0, s = String(name || '');
+    for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973;
+    return AVC[h % AVC.length];
   }
   function seenAt(){ return parseInt(localStorage.getItem(LS_SEEN) || '0', 10) || 0; }
   function isNew(r){ return new Date(r.created_at).getTime() > seenAt(); }
   function secId(s){ return String(s || '').split('#')[0]; }
   function secAnchor(s){ return String(s || '').split('#')[1] || ''; }
+  function repliesOf(id){
+    return rows.filter(function(r){ return r.parent_id === id; })
+               .sort(function(a,b){ return new Date(a.created_at) - new Date(b.created_at); });
+  }
 
   function sectionOf(node){
     var el = node && node.nodeType === 1 ? node : (node && node.parentElement);
@@ -4299,8 +4335,130 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     };
   }
 
+  /* ---------- locating a comment in the page ---------- */
+  function viewOf(sec){ return sec && sec.closest ? sec.closest('.gtm-view') : null; }
+
+  function targetOf(t){
+    var sec = document.getElementById(secId(t.section));
+    if(!sec) return null;
+    var key = secAnchor(t.section);
+    if(key){
+      var byKey = sec.querySelector('[data-t="' + key.replace(/"/g, '\\"') + '"]');
+      if(byKey) return byKey;
+    }
+    var q = String(t.quote || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if(q.length > 5){
+      var walk = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT, null);
+      var re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'));
+      var n;
+      while((n = walk.nextNode())){
+        if(re.test(n.nodeValue || '')) return n.parentElement;
+      }
+    }
+    return sec;
+  }
+
+  /* temporary highlight of the exact phrase */
+  function clearFocus(){
+    clearTimeout(focusTimer);
+    if(focusMark && focusMark.parentNode){
+      var p = focusMark.parentNode;
+      while(focusMark.firstChild) p.insertBefore(focusMark.firstChild, focusMark);
+      p.removeChild(focusMark);
+      p.normalize();
+    }
+    focusMark = null;
+  }
+  function focusQuote(t){
+    clearFocus();
+    var sec = document.getElementById(secId(t.section));
+    if(!sec) return;
+    var q = String(t.quote || '').replace(/\s+/g, ' ').trim();
+    if(q.length < 5) return;
+    var tries = [q];
+    if(q.length > 60) tries.push(q.slice(0, 60).replace(/\s+\S*$/, ''));
+    if(q.length > 30) tries.push(q.slice(0, 30).replace(/\s+\S*$/, ''));
+    for(var k = 0; k < tries.length; k++){
+      var re = new RegExp(tries[k].replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'));
+      var walk = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT, {
+        acceptNode: function(n){
+          if(!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          var p = n.parentElement;
+          if(p && p.closest('.ncc-pop, .ncc-bub, script, style')) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      var node;
+      while((node = walk.nextNode())){
+        var m = re.exec(node.nodeValue);
+        if(!m) continue;
+        try {
+          var r = document.createRange();
+          r.setStart(node, m.index);
+          r.setEnd(node, m.index + m[0].length);
+          var el = document.createElement('mark');
+          el.className = 'ncc-focus';
+          r.surroundContents(el);
+          focusMark = el;
+          focusTimer = setTimeout(clearFocus, 6000);
+          return;
+        } catch(e){ /* crosses tags — try shorter */ }
+      }
+    }
+  }
+
+  /* ---------- margin pins ---------- */
+  function placePins(){
+    if(!pinLayer) return;
+    var open = rows.filter(function(r){ return !r.parent_id && r.section; });
+    var used = {};
+    pinLayer.innerHTML = '';
+    open.forEach(function(t){
+      var sec = document.getElementById(secId(t.section));
+      if(!sec) return;
+      var view = viewOf(sec);
+      if(view && !view.classList.contains('on')) return;         /* other GTM */
+      var el = targetOf(t);
+      if(!el || !(el.offsetWidth || el.offsetHeight)) return;
+      var r = el.getBoundingClientRect();
+      var wrap = el.closest('.wrap') || sec;
+      var wr = wrap.getBoundingClientRect();
+      var x = Math.min(wr.right + 10, window.innerWidth - 56);
+      var y = r.top + window.scrollY - 2;
+      while(used[Math.round(y)]) y += 30;                        /* avoid stacking */
+      used[Math.round(y)] = 1;
+
+      var n = repliesOf(t.id).length + 1;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ncc-pin' + (t.resolved ? ' done' : '');
+      b.setAttribute('data-cid', t.id);
+      b.title = (t.author || 'Anon') + ': ' + String(t.body || '').slice(0, 140);
+      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"'
+        + ' stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4'
+        + ' 8.9 8.9 0 0 1-4-.9L3 21l2-4.5A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg><span>' + n + '</span>';
+      b.style.left = Math.round(x) + 'px';
+      b.style.top  = Math.round(y) + 'px';
+      pinLayer.appendChild(b);
+    });
+    var active = mode === 'thread' && pending && pending.thread;
+    if(active){
+      var on = pinLayer.querySelector('.ncc-pin[data-cid="' + active + '"]');
+      if(on){
+        on.classList.add('on');
+        if(anchorEl && !document.contains(anchorEl)) anchorEl = on;   /* pins were rebuilt */
+      }
+    }
+  }
+  var pinT = null;
+  function schedulePins(d){ clearTimeout(pinT); pinT = setTimeout(placePins, d || 120); }
+
   /* ---------- popover ---------- */
   function build(){
+    pinLayer = document.createElement('div');
+    pinLayer.className = 'ncc-pins';
+    document.body.appendChild(pinLayer);
+
     pop = document.createElement('div');
     pop.className = 'ncc-pop';
     pop.hidden = true;
@@ -4313,7 +4471,7 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     +   '<p class="ncc-as" hidden></p>'
     +   '<div class="ncc-row"><input class="ncc-name" type="text" placeholder="Your name" maxlength="60">'
     +   '<input class="ncc-code" type="password" placeholder="Code" maxlength="60"></div>'
-    +   '<textarea class="ncc-text" placeholder="Write a comment…" maxlength="2000"></textarea>'
+    +   '<textarea class="ncc-text" placeholder="Write your feedback…" maxlength="2000"></textarea>'
     +   '<button class="ncc-send" type="button">Post</button>'
     +   '<p class="ncc-hint">Anyone with the link can read. Posting needs the access code.</p>'
     + '</div>';
@@ -4322,10 +4480,8 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     pop.querySelector('.ncc-x').addEventListener('click', close);
     pop.querySelector('.ncc-send').addEventListener('click', send);
     pop.querySelector('.ncc-ctx').addEventListener('click', function(e){
-      if(e.target.tagName === 'BUTTON'){ pending = null; paintCtx(); }
+      if(e.target.tagName === 'BUTTON'){ pending = pending && pending.thread ? { thread: pending.thread } : null; paintCtx(); }
     });
-    pop.querySelector('.ncc-name').value = localStorage.getItem(LS_NAME) || '';
-    pop.querySelector('.ncc-code').value = localStorage.getItem(LS_CODE) || '';
     pop.querySelector('.ncc-as').addEventListener('click', function(e){
       if(e.target.tagName === 'A'){
         e.preventDefault();
@@ -4333,74 +4489,68 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
         pop.querySelector('.ncc-row').hidden = false;
       }
     });
+    pop.querySelector('.ncc-name').value = localStorage.getItem(LS_NAME) || '';
+    pop.querySelector('.ncc-code').value = localStorage.getItem(LS_CODE) || '';
     paintIdentity();
   }
 
-  /* name + code are asked once, then kept out of the way */
   function paintIdentity(){
     var name = localStorage.getItem(LS_NAME), code = localStorage.getItem(LS_CODE);
     var as = pop.querySelector('.ncc-as'), row = pop.querySelector('.ncc-row');
     if(name && code){
       as.innerHTML = 'Posting as <b>' + esc(name) + '</b> · <a href="#">change</a>';
       as.hidden = false; row.hidden = true;
-    } else {
-      as.hidden = true; row.hidden = false;
-    }
+    } else { as.hidden = true; row.hidden = false; }
   }
 
   function place(){
     if(pop.hidden) return;
     var w = pop.offsetWidth, h = pop.offsetHeight;
-    var vw = window.innerWidth, vh = window.innerHeight, gap = 10;
-    var x, y;
-
+    var vw = window.innerWidth, vh = window.innerHeight, gap = 10, x, y;
     if(mode === 'list'){
-      var b = btns.filter(function(x){ return x.offsetParent; })[0];
+      var b = btns.filter(function(e){ return e.offsetParent; })[0];
       var r = b ? b.getBoundingClientRect() : { bottom: 56, right: vw - 16 };
       x = Math.min(r.right - w, vw - w - 12);
       y = r.bottom + gap;
     } else {
       var rect = anchorEl ? anchorEl.getBoundingClientRect() : anchorRect;
       if(!rect) return;
-      /* to the right of the text if it fits, otherwise to the left, otherwise below */
-      if(rect.right + gap + w < vw - 8)      x = rect.right + gap;
-      else if(rect.left - gap - w > 8)       x = rect.left - gap - w;
-      else                                    x = Math.max(8, Math.min(rect.left, vw - w - 8));
-      y = rect.top - 6;
+      if(rect.left - gap - w > 8)              x = rect.left - gap - w;   /* pins live on the right */
+      else if(rect.right + gap + w < vw - 8)   x = rect.right + gap;
+      else                                      x = Math.max(8, Math.min(rect.left, vw - w - 8));
+      y = rect.top - 8;
     }
     pop.style.left = Math.max(8, Math.min(x, vw - w - 8)) + 'px';
     pop.style.top  = Math.max(8, Math.min(y, vh - h - 8)) + 'px';
   }
-
   function reposition(){
     if(raf) return;
     raf = requestAnimationFrame(function(){ raf = null; place(); });
   }
 
   function open(kind, el, rect){
-    mode = kind;
-    anchorEl = el || null;
-    anchorRect = rect || null;
+    mode = kind; anchorEl = el || null; anchorRect = rect || null;
     pop.hidden = false;
     place();
-    requestAnimationFrame(place);          /* again once the height is known */
+    requestAnimationFrame(place);
   }
-
   function close(){
     pop.hidden = true;
     mode = null; anchorEl = null; anchorRect = null;
-    document.querySelectorAll('mark.ncc-hl.on').forEach(function(m){ m.classList.remove('on'); });
+    pending = null;
+    clearFocus();
+    paintCtx();
+    placePins();
   }
-
   function isOpen(){ return !pop.hidden; }
 
   function paintCtx(){
     var ctx = pop.querySelector('.ncc-ctx');
-    if(pending && pending.quote){
-      ctx.innerHTML = '<span>On: “' + esc(pending.quote.slice(0,80)) + '”</span><button type="button" title="Clear">&times;</button>';
-      ctx.hidden = false;
-    } else if(pending && pending.parent){
+    if(pending && pending.parent){
       ctx.innerHTML = '<span>Replying to ' + esc(pending.parentName) + '</span><button type="button" title="Clear">&times;</button>';
+      ctx.hidden = false;
+    } else if(pending && pending.quote){
+      ctx.innerHTML = '<span>On: “' + esc(pending.quote.slice(0,80)) + '”</span><button type="button" title="Clear">&times;</button>';
       ctx.hidden = false;
     } else { ctx.hidden = true; }
   }
@@ -4415,155 +4565,111 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
   }
 
   /* ---------- rendering ---------- */
-  function threadHTML(t){
-    var reps = rows.filter(function(r){ return r.parent_id === t.id; })
-                   .sort(function(a,b){ return new Date(a.created_at) - new Date(b.created_at); });
-    return '<div class="ncc-th' + (t.resolved ? ' done' : '') + '" data-id="' + esc(t.id) + '">'
-      + (t.section ? '<div class="ncc-sec" data-go="' + esc(t.section) + '">▸ ' + esc(t.section_label || secId(t.section)) + '</div>' : '')
+  function head(r, lead){
+    return '<div class="ncc-top">'
+      + '<span class="ncc-av" style="background:' + avColor(r.author) + '">' + esc(initials(r.author)) + '</span>'
+      + '<span class="ncc-who">' + esc(r.author || 'Anon') + '</span>'
+      + '<span class="ncc-time">· ' + ago(r.created_at) + '</span>'
+      + (isNew(r) && !r.resolved ? '<span class="ncc-new">NEW</span>' : '')
+      + '<span class="ncc-sp"></span>'
+      + '<button class="ncc-del" type="button" data-del="' + esc(r.id) + '" title="Delete">Delete</button>'
+      + '</div>';
+  }
+
+  function threadHTML(t, lead){
+    var reps = repliesOf(t.id);
+    var show = lead || expanded[t.id];
+    return '<div class="ncc-th' + (t.resolved ? ' done' : '') + (lead ? ' lead' : '') + '" data-id="' + esc(t.id) + '">'
+      + head(t, lead)
+      + (!lead && t.section_label ? '<div class="ncc-sec">▸ ' + esc(t.section_label) + '</div>' : '')
       + (t.quote ? '<p class="ncc-q">' + esc(t.quote) + '</p>' : '')
       + '<p class="ncc-msg">' + esc(t.body) + '</p>'
-      + '<div class="ncc-meta"><span class="ncc-who">' + esc(t.author || 'Anon') + '</span><span>' + ago(t.created_at) + '</span>'
-      + (isNew(t) && !t.resolved ? '<span class="ncc-new">NEW</span>' : '')
-      + (t.resolved ? '<span>· resolved</span>' : '') + '</div>'
-      + reps.map(function(r){
-          return '<div class="ncc-rep"><p class="ncc-msg">' + esc(r.body) + '</p>'
-            + '<div class="ncc-meta"><span class="ncc-who">' + esc(r.author || 'Anon') + '</span><span>' + ago(r.created_at) + '</span>'
-            + (isNew(r) ? '<span class="ncc-new">NEW</span>' : '') + '</div></div>';
-        }).join('')
-      + '<div class="ncc-act"><button type="button" data-reply="' + esc(t.id) + '" data-who="' + esc(t.author || 'Anon') + '">Reply</button>'
-      + '<button type="button" data-res="' + esc(t.id) + '" data-st="' + (t.resolved ? '0' : '1') + '">'
-      + (t.resolved ? 'Reopen' : 'Resolve') + '</button></div>'
+      + '<div class="ncc-act">'
+      +   '<button type="button" data-reply="' + esc(t.id) + '" data-who="' + esc(t.author || 'Anon') + '">Reply</button>'
+      +   '<button type="button" data-res="' + esc(t.id) + '" data-st="' + (t.resolved ? '0' : '1') + '">'
+      +   (t.resolved ? 'Reopen' : 'Resolve') + '</button>'
+      + '</div>'
+      + (reps.length && !show
+          ? '<button class="ncc-more" type="button" data-exp="' + esc(t.id) + '">View '
+            + reps.length + (reps.length > 1 ? ' replies' : ' reply') + '</button>'
+          : '')
+      + (reps.length && show
+          ? '<div class="ncc-reps">' + reps.map(function(r){
+              return '<div class="ncc-rep">' + head(r, false)
+                   + '<p class="ncc-msg">' + esc(r.body) + '</p></div>';
+            }).join('') + '</div>'
+          : '')
       + '</div>';
   }
 
   function render(){
     var bodyEl = pop.querySelector('.ncc-body');
-    var head = pop.querySelector('.ncc-hd h3');
+    var h3 = pop.querySelector('.ncc-hd h3');
 
     if(mode === 'thread' && pending && pending.thread){
       var t = rows.filter(function(r){ return r.id === pending.thread; })[0];
-      if(t){
-        head.textContent = 'Comment';
-        bodyEl.innerHTML = threadHTML(t);
-        count(); return;
-      }
+      if(t){ h3.textContent = LABEL; bodyEl.innerHTML = threadHTML(t, true); count(); return; }
+      close(); return;
     }
     if(mode === 'new'){
-      head.textContent = 'New comment';
-      bodyEl.innerHTML = '<p class="ncc-empty">Your comment will be pinned to the text you selected.</p>';
+      h3.textContent = 'New feedback';
+      bodyEl.innerHTML = '<p class="ncc-empty">Your note will be pinned to the text you selected.</p>';
       count(); return;
     }
 
-    head.textContent = 'Comments';
+    h3.textContent = LABEL;
     var tops = rows.filter(function(r){ return !r.parent_id; });
     if(!tops.length){
-      bodyEl.innerHTML = '<p class="ncc-empty">No comments yet.<br><br>Select any text in the report and click <b>Comment</b>.</p>';
+      bodyEl.innerHTML = '<p class="ncc-empty">No feedback yet.<br><br>Select any text in the report and click <b>Comment</b>.</p>';
       count(); return;
     }
     tops.sort(function(a,b){
-      if(a.resolved !== b.resolved) return a.resolved ? 1 : -1;      /* open ones first */
+      if(a.resolved !== b.resolved) return a.resolved ? 1 : -1;
       return new Date(b.created_at) - new Date(a.created_at);
     });
-    bodyEl.innerHTML = tops.map(threadHTML).join('');
+    bodyEl.innerHTML = tops.map(function(t){ return threadHTML(t, false); }).join('');
     count();
   }
 
-  /* ---------- inline highlights ---------- */
-  function unwrap(m){
-    var p = m.parentNode;
-    if(!p) return;
-    while(m.firstChild) p.insertBefore(m.firstChild, m);
-    p.removeChild(m);
-    p.normalize();
-  }
-  function clearHighlights(root){
-    (root || document).querySelectorAll('mark.ncc-hl').forEach(unwrap);
-  }
-  function decorate(el, t, replies){
-    el.className = 'ncc-hl' + (t.resolved ? ' done' : '');
-    el.setAttribute('data-cid', t.id);
-    el.setAttribute('data-n', String(replies + 1));
-    el.title = (t.author || 'Anon') + ': ' + String(t.body || '').slice(0, 160)
-               + (replies ? '  (+' + replies + ')' : '');
-    return el;
-  }
-  function markQuote(sec, quote, t, replies){
-    var q = String(quote || '').replace(/\s+/g, ' ').trim();
-    if(q.length < 4) return false;
-    var tries = [q];
-    if(q.length > 70) tries.push(q.slice(0, 70).replace(/\s+\S*$/, ''));
-    if(q.length > 35) tries.push(q.slice(0, 35).replace(/\s+\S*$/, ''));
-    for(var k = 0; k < tries.length; k++){
-      var needle = tries[k];
-      if(needle.length < 4) continue;
-      var re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'));
-      var walk = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT, {
-        acceptNode: function(n){
-          if(!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-          var p = n.parentElement;
-          if(p && p.closest('mark.ncc-hl, .ncc-pop, .ncc-bub, script, style, .gantt')) return NodeFilter.FILTER_REJECT;
-          return NodeFilter.FILTER_ACCEPT;
-        }
-      });
-      var node;
-      while((node = walk.nextNode())){
-        var m = re.exec(node.nodeValue);
-        if(!m) continue;
-        var range = document.createRange();
-        try {
-          range.setStart(node, m.index);
-          range.setEnd(node, m.index + m[0].length);
-          range.surroundContents(decorate(document.createElement('mark'), t, replies));
-          return true;
-        } catch(e){ /* the quote crosses tags — try a shorter one */ }
-      }
+  /* ---------- navigation ---------- */
+  function goToThread(id){
+    var t = rows.filter(function(r){ return r.id === id; })[0];
+    if(!t) return;
+    var sec = document.getElementById(secId(t.section));
+    if(!sec){ openThread(id, null); return; }
+
+    var view = viewOf(sec);
+    var needSwitch = view && !view.classList.contains('on');
+    if(needSwitch && window.NC && typeof window.NC.go === 'function'){
+      window.NC.go(view.id.replace(/^v-/, ''));              /* jump to the right GTM first */
     }
-    return false;
-  }
-  function markNode(sec, key, t, replies){
-    if(!key) return false;
-    var el = sec.querySelector('[data-t="' + key.replace(/"/g, '\\"') + '"]');
-    if(!el || el.children.length || !(el.textContent || '').trim()) return false;
-    var r = document.createRange();
-    try {
-      r.selectNodeContents(el);
-      r.surroundContents(decorate(document.createElement('mark'), t, replies));
-      return true;
-    } catch(e){ return false; }
-  }
-  function applyHighlights(){
-    clearHighlights();
-    rows.filter(function(r){ return !r.parent_id && r.section; })
-        .forEach(function(t){
-          var sec = document.getElementById(secId(t.section));
-          if(!sec) return;
-          var replies = rows.filter(function(r){ return r.parent_id === t.id; }).length;
-          if(!markQuote(sec, t.quote, t, replies)) markNode(sec, secAnchor(t.section), t, replies);
-        });
+    setTimeout(function(){
+      var el = targetOf(t) || sec;
+      el.scrollIntoView({ behavior: needSwitch ? 'auto' : 'smooth', block:'center' });
+      focusQuote(t);
+      setTimeout(function(){
+        placePins();
+        var pin = pinLayer.querySelector('.ncc-pin[data-cid="' + id + '"]');
+        openThread(id, pin || el);
+      }, needSwitch ? 260 : 420);
+    }, needSwitch ? 220 : 0);
   }
 
-  /* ---------- navigation ---------- */
   function openThread(id, el){
     pending = { thread: id };
-    document.querySelectorAll('mark.ncc-hl.on').forEach(function(m){ m.classList.remove('on'); });
-    if(el) el.classList.add('on');
+    var t = rows.filter(function(r){ return r.id === id; })[0];
+    if(t) focusQuote(t);
     open('thread', el || null);
     render();
     place();
+    markActivePin(id);
   }
 
-  function goTo(sectionValue, th){
-    var cid = th && th.getAttribute('data-id');
-    var mk = cid && document.querySelector('mark.ncc-hl[data-cid="' + cid + '"]');
-    if(mk){
-      mk.scrollIntoView({ behavior:'smooth', block:'center' });
-      mk.classList.add('ncc-flash');
-      setTimeout(function(){ mk.classList.remove('ncc-flash'); }, 2400);
-      setTimeout(function(){ if(isOpen()) openThread(cid, mk); }, 500);
-      return;
-    }
-    var sec = document.getElementById(secId(sectionValue));
-    if(sec) sec.scrollIntoView({ behavior:'smooth', block:'start' });
+  function markActivePin(id){
+    if(!pinLayer) return;
+    pinLayer.querySelectorAll('.ncc-pin.on').forEach(function(p){ p.classList.remove('on'); });
+    var act = pinLayer.querySelector('.ncc-pin[data-cid="' + id + '"]');
+    if(act) act.classList.add('on');
   }
 
   /* ---------- events ---------- */
@@ -4572,45 +4678,51 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
       var t = e.target;
       if(!t || !t.closest) return;
 
-      var mk = t.closest('mark.ncc-hl');
-      if(mk){ openThread(mk.getAttribute('data-cid'), mk); return; }
+      var pin = t.closest('.ncc-pin');
+      if(pin){
+        var cid = pin.getAttribute('data-cid');
+        if(isOpen() && mode === 'thread' && pending && pending.thread === cid){ close(); return; }
+        openThread(cid, pin);
+        return;
+      }
 
       if(t.closest('.ncc-pop')){
+        if(t.dataset && t.dataset.del){ armDelete(t); return; }
         if(t.dataset && t.dataset.reply){
-          pending = { thread: pending && pending.thread, parent: t.dataset.reply, parentName: t.dataset.who };
+          pending = { thread: (pending && pending.thread) || t.dataset.reply,
+                      parent: t.dataset.reply, parentName: t.dataset.who };
           paintCtx();
           pop.querySelector('.ncc-text').focus();
-        } else if(t.dataset && t.dataset.res){
-          resolve(t.dataset.res, t.dataset.st === '1');
-        } else if(t.dataset && t.dataset.go){
-          goTo(t.dataset.go, t.closest('.ncc-th'));
+          return;
         }
+        if(t.dataset && t.dataset.res){ resolve(t.dataset.res, t.dataset.st === '1'); return; }
+        if(t.dataset && t.dataset.exp){ expanded[t.dataset.exp] = true; render(); place(); return; }
+        var card = t.closest('.ncc-th');
+        if(card && mode === 'list'){ goToThread(card.getAttribute('data-id')); }
         return;
       }
 
       if(t.closest('.ncc-btn') || t.closest('.ncc-bub')) return;
-      if(isOpen()) close();                              /* click anywhere else closes it */
+      if(isOpen()) close();
     });
 
-    document.addEventListener('keydown', function(e){
-      if(e.key === 'Escape' && isOpen()) close();
-    });
-
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && isOpen()) close(); });
     window.addEventListener('scroll', reposition, true);
-    window.addEventListener('resize', reposition);
+    window.addEventListener('resize', function(){ reposition(); schedulePins(150); });
 
-    /* the page repaints itself when the view or the language changes */
+    if(window.NC && window.NC.onSwitch) window.NC.onSwitch.push(function(){ schedulePins(450); });
     document.addEventListener('click', function(e){
-      if(e.target.closest && e.target.closest('.gtmnav, .navrow, [data-lang], .langsw, [data-switch]'))
-        setTimeout(applyHighlights, 400);
+      if(e.target.closest && e.target.closest('.gtmnav, .navrow, [data-lang], .langsw, [data-switch], .exp-more'))
+        schedulePins(500);
     });
+    window.addEventListener('load', function(){ schedulePins(700); });
   }
 
   /* selection → bubble → new comment */
   var bubble;
   function initBubble(){
     document.addEventListener('mouseup', function(e){
-      if(e.target.closest && e.target.closest('.ncc-pop, .ncc-bub, .ncc-btn')) return;
+      if(e.target.closest && e.target.closest('.ncc-pop, .ncc-bub, .ncc-btn, .ncc-pin')) return;
       setTimeout(function(){
         var sel = window.getSelection();
         var text = sel ? String(sel).replace(/\s+/g,' ').trim() : '';
@@ -4646,11 +4758,11 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
       .order('created_at', { ascending:false })
       .limit(400)
       .then(function(res){
-        if(res.error){ console.error('[comments]', res.error); return; }
+        if(res.error){ console.error('[feedback]', res.error); return; }
         rows = res.data || [];
         if(isOpen()) render();
         count();
-        applyHighlights();
+        placePins();
       });
   }
 
@@ -4659,20 +4771,23 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     p.textContent = msg || '';
     p.hidden = !msg;
   }
+  function code(){
+    return (pop.querySelector('.ncc-code').value || localStorage.getItem(LS_CODE) || '').trim();
+  }
 
   function send(){
-    var name = pop.querySelector('.ncc-name').value.trim();
+    var name = pop.querySelector('.ncc-name').value.trim() || localStorage.getItem(LS_NAME) || '';
     var text = pop.querySelector('.ncc-text').value.trim();
-    var code = pop.querySelector('.ncc-code').value.trim();
+    var c = code();
     if(!name) return err('Please write your name.');
     if(!text) return err('The comment is empty.');
-    if(!code) return err('You need the access code to post.');
+    if(!c) return err('You need the access code to post.');
     err('');
     var btn = pop.querySelector('.ncc-send');
     btn.disabled = true; btn.textContent = 'Posting…';
 
     sb.rpc('nc_add_comment', {
-      p_code: code,
+      p_code: c,
       p_report: REPORT,
       p_section: (pending && pending.section) || '',
       p_label: (pending && pending.label) || '',
@@ -4687,10 +4802,11 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
         return;
       }
       localStorage.setItem(LS_NAME, name);
-      localStorage.setItem(LS_CODE, code);
+      localStorage.setItem(LS_CODE, c);
       paintIdentity();
       pop.querySelector('.ncc-text').value = '';
       var keep = pending && pending.thread;
+      if(keep) expanded[keep] = true;
       pending = keep ? { thread: keep } : null;
       paintCtx();
       load().then(function(){ if(isOpen()){ render(); place(); } });
@@ -4698,9 +4814,9 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
   }
 
   function resolve(id, state){
-    var code = (pop.querySelector('.ncc-code').value || localStorage.getItem(LS_CODE) || '').trim();
-    if(!code){ err('You need the access code to resolve a comment.'); return; }
-    sb.rpc('nc_resolve_comment', { p_code: code, p_id: id, p_state: state })
+    var c = code();
+    if(!c){ err('You need the access code for that.'); return; }
+    sb.rpc('nc_resolve_comment', { p_code: c, p_id: id, p_state: state })
       .then(function(res){
         if(res.error){ err('Could not update: ' + res.error.message); return; }
         err('');
@@ -4708,20 +4824,44 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
       });
   }
 
-  /* the page rewrites its own text (EN/ES switch, ?edit=1 editor).
-     Take our highlights out of the way first, then put them back. */
-  var rehl = null;
-  function hookRepaint(){
-    var prev = window.__ncSetText;
-    window.__ncSetText = function(el, v){
-      if(el && el.querySelector && el.querySelector('mark.ncc-hl')){
-        clearHighlights(el);
-        clearTimeout(rehl);
-        rehl = setTimeout(applyHighlights, 250);
+  /* two-step delete: first click arms the button, second one deletes */
+  var armed = null, armTimer = null;
+  function armDelete(btn){
+    var id = btn.dataset.del;
+    if(armed !== id){
+      armed = id;
+      btn.setAttribute('data-armed', '1');
+      btn.textContent = 'Delete?';
+      clearTimeout(armTimer);
+      armTimer = setTimeout(function(){
+        armed = null;
+        btn.removeAttribute('data-armed');
+        btn.textContent = 'Delete';
+      }, 4000);
+      return;
+    }
+    clearTimeout(armTimer);
+    armed = null;
+    var c = code();
+    if(!c){ err('You need the access code to delete.'); return; }
+    btn.textContent = '…';
+    sb.rpc('nc_delete_comment', { p_code: c, p_id: id }).then(function(res){
+      if(res.error){
+        btn.textContent = 'Delete';
+        btn.removeAttribute('data-armed');
+        if(/(could not find|does not exist|PGRST202)/i.test(res.error.message || ''))
+          err('Deleting is not set up yet — run the extra SQL snippet in Supabase.');
+        else if(/code/i.test(res.error.message || '')) err('Wrong access code.');
+        else err('Could not delete: ' + res.error.message);
+        return;
       }
-      if(prev) return prev(el, v);
-      if(el && !el.children.length) el.textContent = v;
-    };
+      err('');
+      var wasThread = pending && pending.thread === id;
+      load().then(function(){
+        if(wasThread) close();
+        else if(isOpen()){ render(); place(); }
+      });
+    });
   }
 
   /* ---------- mount ---------- */
@@ -4731,14 +4871,11 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'ncc-btn';
-      b.innerHTML = 'Comments<span class="ncc-n" data-z="1">0</span>';
+      b.innerHTML = LABEL + '<span class="ncc-n" data-z="1">0</span>';
       b.addEventListener('click', function(){
         if(isOpen() && mode === 'list'){ close(); return; }
-        pending = null;
-        paintCtx();
-        open('list');
-        render();
-        place();
+        pending = null; paintCtx();
+        open('list'); render(); place();
         localStorage.setItem(LS_SEEN, String(Date.now()));
       });
       var lang = nav.querySelector('.langsw');
@@ -4752,18 +4889,18 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     s.src = LIB;
     s.onload = function(){
       sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
-      style(); build(); mountButtons(); initBubble(); wire(); hookRepaint();
+      style(); build(); mountButtons(); initBubble(); wire();
       load();
       try {
         sb.channel('nc_comments_' + REPORT)
           .on('postgres_changes', { event:'*', schema:'public', table:'nc_comments' }, function(){ load(); })
           .subscribe();
-      } catch(e){ console.warn('[comments] realtime unavailable', e); }
+      } catch(e){ console.warn('[feedback] realtime unavailable', e); }
       setInterval(function(){ if(!document.hidden) load(); }, 15000);
       document.addEventListener('visibilitychange', function(){ if(!document.hidden) load(); });
       window.addEventListener('focus', load);
     };
-    s.onerror = function(){ console.warn('[comments] could not load supabase-js'); };
+    s.onerror = function(){ console.warn('[feedback] could not load supabase-js'); };
     document.head.appendChild(s);
   }
 
