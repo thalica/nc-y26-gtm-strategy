@@ -4156,6 +4156,8 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
    Backend: Supabase (table nc_comments + RPC nc_add_comment).
    The access code is NEVER in this file: it is checked inside
    the database function, so nobody can read it from the source.
+   UI: a small popover next to the commented text, plus an inbox
+   dropdown under the nav button. Nothing covers the page.
    ============================================================ */
 (function(){
   'use strict';
@@ -4167,67 +4169,97 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
 
   var LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js';
   var REPORT = 'nc-gtm-plan';
-  var LS_CODE = 'nc_cmt_code', LS_NAME = 'nc_cmt_name';
+  var LS_CODE = 'nc_cmt_code', LS_NAME = 'nc_cmt_name', LS_SEEN = 'nc_cmt_seen';
 
   if(SUPA_URL.indexOf('PASTE_') === 0){
     console.warn('[comments] Supabase not configured — panel disabled.');
     return;
   }
 
-  var sb = null, rows = [], open = false, pending = null;
+  var sb = null, rows = [], pending = null;
+  var pop, mode = null, anchorEl = null, anchorRect = null, raf = null;
+  var btns = [];
 
   /* ---------- styles ---------- */
   var CSS = ''
+  /* nav button */
   + '.ncc-btn{position:relative;padding:5px 11px;border-radius:7px;cursor:pointer;border:1px solid var(--line,#2e2e36);'
   + 'background:transparent;color:inherit;font-family:inherit;font-size:12px;letter-spacing:.04em;}'
   + '.ncc-btn:hover{border-color:#F26722;color:#F26722;}'
   + '.ncc-btn .ncc-n{display:inline-block;min-width:16px;margin-left:6px;padding:0 4px;border-radius:9px;'
   + 'background:#F26722;color:#fff;font-size:10px;line-height:16px;text-align:center;}'
   + '.ncc-btn .ncc-n[data-z="1"]{display:none;}'
-  + '.ncc-panel{position:fixed;top:0;right:0;width:370px;max-width:92vw;height:100vh;z-index:9998;'
-  + 'background:#101014;border-left:1px solid #2a2a31;display:flex;flex-direction:column;'
-  + 'transform:translateX(100%);transition:transform .22s ease;color:#e8e8ee;'
-  + 'font-family:system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:-18px 0 40px rgba(0,0,0,.45);}'
-  + '.ncc-panel.on{transform:none;}'
-  + '.ncc-hd{display:flex;align-items:center;gap:10px;padding:16px 16px 12px;border-bottom:1px solid #24242b;}'
-  + '.ncc-hd h3{margin:0;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#F26722;flex:1;}'
-  + '.ncc-x{background:none;border:0;color:#8a8a95;font-size:20px;line-height:1;cursor:pointer;}'
+
+  /* popover */
+  + '.ncc-pop{position:fixed;z-index:9998;width:340px;max-width:calc(100vw - 24px);'
+  + 'background:#101014;border:1px solid #2a2a31;border-radius:12px;color:#e8e8ee;'
+  + 'font-family:system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 18px 44px rgba(0,0,0,.45);'
+  + 'display:flex;flex-direction:column;overflow:hidden;}'
+  + '.ncc-pop[hidden]{display:none;}'
+  + '.ncc-hd{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid #24242b;flex:0 0 auto;}'
+  + '.ncc-hd h3{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#F26722;flex:1;}'
+  + '.ncc-x{background:none;border:0;color:#8a8a95;font-size:19px;line-height:1;cursor:pointer;padding:0 2px;}'
   + '.ncc-x:hover{color:#fff;}'
-  + '.ncc-body{flex:1;overflow-y:auto;padding:12px 14px 20px;}'
-  + '.ncc-empty{color:#6e6e78;font-size:12px;line-height:1.6;padding:18px 2px;}'
-  + '.ncc-th{border:1px solid #26262e;border-radius:10px;padding:11px 12px;margin-bottom:10px;background:#16161b;}'
+  + '.ncc-body{flex:1 1 auto;overflow-y:auto;max-height:46vh;padding:10px 12px;}'
+  + '.ncc-empty{color:#6e6e78;font-size:11.5px;line-height:1.6;padding:8px 2px;}'
+
+  /* threads */
+  + '.ncc-th{border:1px solid #26262e;border-radius:9px;padding:9px 10px;margin-bottom:8px;background:#16161b;}'
+  + '.ncc-th:last-child{margin-bottom:0;}'
   + '.ncc-th.done{opacity:.5;}'
-  + '.ncc-sec{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#6e6e78;margin-bottom:5px;cursor:pointer;}'
+  + '.ncc-th.hit{border-color:#F26722;}'
+  + '.ncc-sec{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:#6e6e78;margin-bottom:4px;cursor:pointer;}'
   + '.ncc-sec:hover{color:#F26722;}'
-  + '.ncc-q{border-left:2px solid #F26722;padding:1px 0 1px 8px;margin:0 0 8px;color:#9a9aa2;font-size:11px;'
+  + '.ncc-q{border-left:2px solid #F26722;padding:1px 0 1px 7px;margin:0 0 6px;color:#9a9aa2;font-size:10.5px;'
   + 'font-style:italic;line-height:1.45;}'
-  + '.ncc-msg{font-size:12.5px;line-height:1.55;margin:0 0 6px;white-space:pre-wrap;word-break:break-word;}'
-  + '.ncc-meta{font-size:10px;color:#6e6e78;display:flex;gap:8px;align-items:center;}'
+  + '.ncc-msg{font-size:12.5px;line-height:1.5;margin:0 0 5px;white-space:pre-wrap;word-break:break-word;}'
+  + '.ncc-meta{font-size:10px;color:#6e6e78;display:flex;gap:7px;align-items:center;flex-wrap:wrap;}'
   + '.ncc-who{color:#b9b9c4;font-weight:600;}'
-  + '.ncc-rep{margin:9px 0 0 10px;padding-left:10px;border-left:1px solid #2a2a31;}'
+  + '.ncc-new{background:#F26722;color:#fff;border-radius:4px;padding:0 4px;font-size:8.5px;font-weight:700;letter-spacing:.06em;}'
+  + '.ncc-rep{margin:8px 0 0 8px;padding-left:9px;border-left:1px solid #2a2a31;}'
   + '.ncc-rep .ncc-msg{font-size:12px;}'
-  + '.ncc-act{margin-top:9px;display:flex;gap:8px;}'
+  + '.ncc-act{margin-top:8px;display:flex;gap:7px;}'
   + '.ncc-act button{background:none;border:1px solid #2e2e36;color:#8a8a95;border-radius:6px;'
   + 'padding:3px 9px;font-size:10.5px;cursor:pointer;font-family:inherit;}'
   + '.ncc-act button:hover{border-color:#F26722;color:#F26722;}'
-  + '.ncc-form{border-top:1px solid #24242b;padding:12px 14px 14px;background:#0d0d11;}'
+
+  /* composer */
+  + '.ncc-form{flex:0 0 auto;border-top:1px solid #24242b;padding:10px 12px 12px;background:#0d0d11;}'
   + '.ncc-form input,.ncc-form textarea{width:100%;box-sizing:border-box;background:#17171d;color:#e8e8ee;'
-  + 'border:1px solid #2a2a31;border-radius:7px;padding:8px 10px;font-size:12px;font-family:inherit;margin-bottom:7px;}'
-  + '.ncc-form textarea{min-height:64px;resize:vertical;}'
+  + 'border:1px solid #2a2a31;border-radius:7px;padding:7px 9px;font-size:12px;font-family:inherit;margin-bottom:6px;}'
+  + '.ncc-form textarea{min-height:56px;resize:vertical;}'
   + '.ncc-form input:focus,.ncc-form textarea:focus{outline:0;border-color:#F26722;}'
-  + '.ncc-send{width:100%;background:#F26722;border:0;color:#fff;border-radius:7px;padding:9px;'
+  + '.ncc-row{display:flex;gap:6px;}'
+  + '.ncc-row input{margin-bottom:6px;}'
+  + '.ncc-send{width:100%;background:#F26722;border:0;color:#fff;border-radius:7px;padding:8px;'
   + 'font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}'
   + '.ncc-send:disabled{opacity:.5;cursor:default;}'
-  + '.ncc-err{color:#ff6b6b;font-size:11px;margin:0 0 7px;line-height:1.45;}'
-  + '.ncc-hint{color:#6e6e78;font-size:10.5px;margin:7px 0 0;line-height:1.5;}'
-  + '.ncc-ctx{font-size:10.5px;color:#F26722;margin:0 0 7px;display:flex;gap:6px;align-items:flex-start;}'
+  + '.ncc-err{color:#ff6b6b;font-size:11px;margin:0 0 6px;line-height:1.45;}'
+  + '.ncc-err[hidden]{display:none;}'
+  + '.ncc-hint{color:#6e6e78;font-size:10px;margin:6px 0 0;line-height:1.5;}'
+  + '.ncc-as{color:#6e6e78;font-size:10.5px;margin:0 0 6px;}'
+  + '.ncc-as[hidden]{display:none;}'
+  + '.ncc-as b{color:#b9b9c4;}'
+  + '.ncc-as a{color:#F26722;text-decoration:none;}'
+  + '.ncc-row[hidden]{display:none;}'
+  + '.ncc-ctx{font-size:10.5px;color:#F26722;margin:0 0 6px;display:flex;gap:6px;align-items:flex-start;line-height:1.4;}'
   + '.ncc-ctx[hidden]{display:none;}'
   + '.ncc-ctx button{background:none;border:0;color:#6e6e78;cursor:pointer;font-size:13px;line-height:1;padding:0;}'
+
+  /* selection bubble + inline marks */
   + '.ncc-bub{position:absolute;z-index:9999;background:#F26722;color:#fff;border:0;border-radius:7px;'
   + 'padding:6px 11px;font-size:11.5px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);'
   + 'font-family:system-ui,sans-serif;}'
   + '.ncc-flash{background:rgba(242,103,34,.28)!important;transition:background .4s;}'
-  + '@media(max-width:640px){.ncc-panel{width:100%;}}';
+  + 'mark.ncc-hl{background:rgba(242,103,34,.18);color:inherit;border-bottom:2px solid #F26722;'
+  + 'border-radius:2px;padding:0 1px;cursor:pointer;}'
+  + 'mark.ncc-hl:hover{background:rgba(242,103,34,.36);}'
+  + 'mark.ncc-hl.on{background:rgba(242,103,34,.36);}'
+  + 'mark.ncc-hl::after{content:attr(data-n);font-size:9px;font-weight:700;color:#F26722;'
+  + 'vertical-align:super;margin-left:2px;line-height:0;}'
+  + 'mark.ncc-hl.done{background:rgba(130,130,140,.16);border-bottom-color:#9a9aa2;}'
+  + 'mark.ncc-hl.done::after{color:#9a9aa2;}'
+  + '@media(max-width:640px){.ncc-pop{width:calc(100vw - 20px);} .ncc-body{max-height:40vh;}}';
 
   function style(){
     var s = document.createElement('style');
@@ -4249,54 +4281,123 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     if(d < 604800) return Math.floor(d/86400) + 'd';
     return new Date(iso).toLocaleDateString();
   }
+  function seenAt(){ return parseInt(localStorage.getItem(LS_SEEN) || '0', 10) || 0; }
+  function isNew(r){ return new Date(r.created_at).getTime() > seenAt(); }
+  function secId(s){ return String(s || '').split('#')[0]; }
+  function secAnchor(s){ return String(s || '').split('#')[1] || ''; }
+
   function sectionOf(node){
     var el = node && node.nodeType === 1 ? node : (node && node.parentElement);
     var sec = el && el.closest ? el.closest('section[id]') : null;
     if(!sec) return { id:'', label:'' };
     var h = sec.querySelector('h2, h1');
-    return { id: sec.id, label: (h ? h.textContent : sec.id).replace(/\s+/g,' ').trim().slice(0,70) };
+    var keyed = el && el.closest ? el.closest('[data-t]') : null;   /* survives EN/ES */
+    var key = keyed ? keyed.getAttribute('data-t') : '';
+    return {
+      id: sec.id + (key ? '#' + key : ''),
+      label: (h ? h.textContent : sec.id).replace(/\s+/g,' ').trim().slice(0,70)
+    };
   }
 
-  /* ---------- DOM ---------- */
-  var panel, body, form, btns = [];
-
-  function buildPanel(){
-    panel = document.createElement('aside');
-    panel.className = 'ncc-panel';
-    panel.innerHTML =
-      '<div class="ncc-hd"><h3>Comments</h3><button class="ncc-x" type="button" aria-label="Close">&times;</button></div>'
+  /* ---------- popover ---------- */
+  function build(){
+    pop = document.createElement('div');
+    pop.className = 'ncc-pop';
+    pop.hidden = true;
+    pop.innerHTML =
+      '<div class="ncc-hd"><h3></h3><button class="ncc-x" type="button" aria-label="Close">&times;</button></div>'
     + '<div class="ncc-body"></div>'
     + '<div class="ncc-form">'
     +   '<div class="ncc-ctx" hidden></div>'
     +   '<p class="ncc-err" hidden></p>'
-    +   '<input class="ncc-name" type="text" placeholder="Your name" maxlength="60">'
+    +   '<p class="ncc-as" hidden></p>'
+    +   '<div class="ncc-row"><input class="ncc-name" type="text" placeholder="Your name" maxlength="60">'
+    +   '<input class="ncc-code" type="password" placeholder="Code" maxlength="60"></div>'
     +   '<textarea class="ncc-text" placeholder="Write a comment…" maxlength="2000"></textarea>'
-    +   '<input class="ncc-code" type="password" placeholder="Access code" maxlength="60">'
-    +   '<button class="ncc-send" type="button">Post comment</button>'
-    +   '<p class="ncc-hint">Anyone with the link can read the comments. Posting a comment needs the access code.</p>'
+    +   '<button class="ncc-send" type="button">Post</button>'
+    +   '<p class="ncc-hint">Anyone with the link can read. Posting needs the access code.</p>'
     + '</div>';
-    document.body.appendChild(panel);
-    body = panel.querySelector('.ncc-body');
-    form = panel.querySelector('.ncc-form');
+    document.body.appendChild(pop);
 
-    panel.querySelector('.ncc-x').addEventListener('click', toggle);
-    panel.querySelector('.ncc-send').addEventListener('click', send);
-    panel.querySelector('.ncc-ctx').addEventListener('click', function(e){
+    pop.querySelector('.ncc-x').addEventListener('click', close);
+    pop.querySelector('.ncc-send').addEventListener('click', send);
+    pop.querySelector('.ncc-ctx').addEventListener('click', function(e){
       if(e.target.tagName === 'BUTTON'){ pending = null; paintCtx(); }
     });
-    panel.querySelector('.ncc-name').value = localStorage.getItem(LS_NAME) || '';
-    panel.querySelector('.ncc-code').value = localStorage.getItem(LS_CODE) || '';
+    pop.querySelector('.ncc-name').value = localStorage.getItem(LS_NAME) || '';
+    pop.querySelector('.ncc-code').value = localStorage.getItem(LS_CODE) || '';
+    pop.querySelector('.ncc-as').addEventListener('click', function(e){
+      if(e.target.tagName === 'A'){
+        e.preventDefault();
+        pop.querySelector('.ncc-as').hidden = true;
+        pop.querySelector('.ncc-row').hidden = false;
+      }
+    });
+    paintIdentity();
   }
 
-  function toggle(force){
-    open = (force === true || force === false) ? force : !open;
-    panel.classList.toggle('on', open);
+  /* name + code are asked once, then kept out of the way */
+  function paintIdentity(){
+    var name = localStorage.getItem(LS_NAME), code = localStorage.getItem(LS_CODE);
+    var as = pop.querySelector('.ncc-as'), row = pop.querySelector('.ncc-row');
+    if(name && code){
+      as.innerHTML = 'Posting as <b>' + esc(name) + '</b> · <a href="#">change</a>';
+      as.hidden = false; row.hidden = true;
+    } else {
+      as.hidden = true; row.hidden = false;
+    }
   }
+
+  function place(){
+    if(pop.hidden) return;
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    var vw = window.innerWidth, vh = window.innerHeight, gap = 10;
+    var x, y;
+
+    if(mode === 'list'){
+      var b = btns.filter(function(x){ return x.offsetParent; })[0];
+      var r = b ? b.getBoundingClientRect() : { bottom: 56, right: vw - 16 };
+      x = Math.min(r.right - w, vw - w - 12);
+      y = r.bottom + gap;
+    } else {
+      var rect = anchorEl ? anchorEl.getBoundingClientRect() : anchorRect;
+      if(!rect) return;
+      /* to the right of the text if it fits, otherwise to the left, otherwise below */
+      if(rect.right + gap + w < vw - 8)      x = rect.right + gap;
+      else if(rect.left - gap - w > 8)       x = rect.left - gap - w;
+      else                                    x = Math.max(8, Math.min(rect.left, vw - w - 8));
+      y = rect.top - 6;
+    }
+    pop.style.left = Math.max(8, Math.min(x, vw - w - 8)) + 'px';
+    pop.style.top  = Math.max(8, Math.min(y, vh - h - 8)) + 'px';
+  }
+
+  function reposition(){
+    if(raf) return;
+    raf = requestAnimationFrame(function(){ raf = null; place(); });
+  }
+
+  function open(kind, el, rect){
+    mode = kind;
+    anchorEl = el || null;
+    anchorRect = rect || null;
+    pop.hidden = false;
+    place();
+    requestAnimationFrame(place);          /* again once the height is known */
+  }
+
+  function close(){
+    pop.hidden = true;
+    mode = null; anchorEl = null; anchorRect = null;
+    document.querySelectorAll('mark.ncc-hl.on').forEach(function(m){ m.classList.remove('on'); });
+  }
+
+  function isOpen(){ return !pop.hidden; }
 
   function paintCtx(){
-    var ctx = panel.querySelector('.ncc-ctx');
+    var ctx = pop.querySelector('.ncc-ctx');
     if(pending && pending.quote){
-      ctx.innerHTML = '<span>Replying to: “' + esc(pending.quote.slice(0,90)) + '”</span><button type="button" title="Clear">&times;</button>';
+      ctx.innerHTML = '<span>On: “' + esc(pending.quote.slice(0,80)) + '”</span><button type="button" title="Clear">&times;</button>';
       ctx.hidden = false;
     } else if(pending && pending.parent){
       ctx.innerHTML = '<span>Replying to ' + esc(pending.parentName) + '</span><button type="button" title="Clear">&times;</button>';
@@ -4313,86 +4414,208 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     });
   }
 
+  /* ---------- rendering ---------- */
+  function threadHTML(t){
+    var reps = rows.filter(function(r){ return r.parent_id === t.id; })
+                   .sort(function(a,b){ return new Date(a.created_at) - new Date(b.created_at); });
+    return '<div class="ncc-th' + (t.resolved ? ' done' : '') + '" data-id="' + esc(t.id) + '">'
+      + (t.section ? '<div class="ncc-sec" data-go="' + esc(t.section) + '">▸ ' + esc(t.section_label || secId(t.section)) + '</div>' : '')
+      + (t.quote ? '<p class="ncc-q">' + esc(t.quote) + '</p>' : '')
+      + '<p class="ncc-msg">' + esc(t.body) + '</p>'
+      + '<div class="ncc-meta"><span class="ncc-who">' + esc(t.author || 'Anon') + '</span><span>' + ago(t.created_at) + '</span>'
+      + (isNew(t) && !t.resolved ? '<span class="ncc-new">NEW</span>' : '')
+      + (t.resolved ? '<span>· resolved</span>' : '') + '</div>'
+      + reps.map(function(r){
+          return '<div class="ncc-rep"><p class="ncc-msg">' + esc(r.body) + '</p>'
+            + '<div class="ncc-meta"><span class="ncc-who">' + esc(r.author || 'Anon') + '</span><span>' + ago(r.created_at) + '</span>'
+            + (isNew(r) ? '<span class="ncc-new">NEW</span>' : '') + '</div></div>';
+        }).join('')
+      + '<div class="ncc-act"><button type="button" data-reply="' + esc(t.id) + '" data-who="' + esc(t.author || 'Anon') + '">Reply</button>'
+      + '<button type="button" data-res="' + esc(t.id) + '" data-st="' + (t.resolved ? '0' : '1') + '">'
+      + (t.resolved ? 'Reopen' : 'Resolve') + '</button></div>'
+      + '</div>';
+  }
+
   function render(){
-    var tops = rows.filter(function(r){ return !r.parent_id; });
-    if(!tops.length){
-      body.innerHTML = '<p class="ncc-empty">No comments yet.<br><br>Select any text in the report and click <b>Comment</b>, or just write below.</p>';
+    var bodyEl = pop.querySelector('.ncc-body');
+    var head = pop.querySelector('.ncc-hd h3');
+
+    if(mode === 'thread' && pending && pending.thread){
+      var t = rows.filter(function(r){ return r.id === pending.thread; })[0];
+      if(t){
+        head.textContent = 'Comment';
+        bodyEl.innerHTML = threadHTML(t);
+        count(); return;
+      }
+    }
+    if(mode === 'new'){
+      head.textContent = 'New comment';
+      bodyEl.innerHTML = '<p class="ncc-empty">Your comment will be pinned to the text you selected.</p>';
       count(); return;
     }
-    tops.sort(function(a,b){ return new Date(b.created_at) - new Date(a.created_at); });
-    body.innerHTML = tops.map(function(t){
-      var reps = rows.filter(function(r){ return r.parent_id === t.id; })
-                     .sort(function(a,b){ return new Date(a.created_at) - new Date(b.created_at); });
-      return '<div class="ncc-th' + (t.resolved ? ' done' : '') + '" data-id="' + esc(t.id) + '">'
-        + (t.section ? '<div class="ncc-sec" data-go="' + esc(t.section) + '">▸ ' + esc(t.section_label || t.section) + '</div>' : '')
-        + (t.quote ? '<p class="ncc-q">' + esc(t.quote) + '</p>' : '')
-        + '<p class="ncc-msg">' + esc(t.body) + '</p>'
-        + '<div class="ncc-meta"><span class="ncc-who">' + esc(t.author || 'Anon') + '</span><span>' + ago(t.created_at) + '</span>'
-        + (t.resolved ? '<span>· resolved</span>' : '') + '</div>'
-        + reps.map(function(r){
-            return '<div class="ncc-rep"><p class="ncc-msg">' + esc(r.body) + '</p>'
-              + '<div class="ncc-meta"><span class="ncc-who">' + esc(r.author || 'Anon') + '</span><span>' + ago(r.created_at) + '</span></div></div>';
-          }).join('')
-        + '<div class="ncc-act"><button type="button" data-reply="' + esc(t.id) + '" data-who="' + esc(t.author || 'Anon') + '">Reply</button>'
-        + '<button type="button" data-res="' + esc(t.id) + '" data-st="' + (t.resolved ? '0' : '1') + '">'
-        + (t.resolved ? 'Reopen' : 'Resolve') + '</button></div>'
-        + '</div>';
-    }).join('');
+
+    head.textContent = 'Comments';
+    var tops = rows.filter(function(r){ return !r.parent_id; });
+    if(!tops.length){
+      bodyEl.innerHTML = '<p class="ncc-empty">No comments yet.<br><br>Select any text in the report and click <b>Comment</b>.</p>';
+      count(); return;
+    }
+    tops.sort(function(a,b){
+      if(a.resolved !== b.resolved) return a.resolved ? 1 : -1;      /* open ones first */
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+    bodyEl.innerHTML = tops.map(threadHTML).join('');
     count();
   }
 
-  body_delegate();
-  function body_delegate(){
+  /* ---------- inline highlights ---------- */
+  function unwrap(m){
+    var p = m.parentNode;
+    if(!p) return;
+    while(m.firstChild) p.insertBefore(m.firstChild, m);
+    p.removeChild(m);
+    p.normalize();
+  }
+  function clearHighlights(root){
+    (root || document).querySelectorAll('mark.ncc-hl').forEach(unwrap);
+  }
+  function decorate(el, t, replies){
+    el.className = 'ncc-hl' + (t.resolved ? ' done' : '');
+    el.setAttribute('data-cid', t.id);
+    el.setAttribute('data-n', String(replies + 1));
+    el.title = (t.author || 'Anon') + ': ' + String(t.body || '').slice(0, 160)
+               + (replies ? '  (+' + replies + ')' : '');
+    return el;
+  }
+  function markQuote(sec, quote, t, replies){
+    var q = String(quote || '').replace(/\s+/g, ' ').trim();
+    if(q.length < 4) return false;
+    var tries = [q];
+    if(q.length > 70) tries.push(q.slice(0, 70).replace(/\s+\S*$/, ''));
+    if(q.length > 35) tries.push(q.slice(0, 35).replace(/\s+\S*$/, ''));
+    for(var k = 0; k < tries.length; k++){
+      var needle = tries[k];
+      if(needle.length < 4) continue;
+      var re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'));
+      var walk = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT, {
+        acceptNode: function(n){
+          if(!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          var p = n.parentElement;
+          if(p && p.closest('mark.ncc-hl, .ncc-pop, .ncc-bub, script, style, .gantt')) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      var node;
+      while((node = walk.nextNode())){
+        var m = re.exec(node.nodeValue);
+        if(!m) continue;
+        var range = document.createRange();
+        try {
+          range.setStart(node, m.index);
+          range.setEnd(node, m.index + m[0].length);
+          range.surroundContents(decorate(document.createElement('mark'), t, replies));
+          return true;
+        } catch(e){ /* the quote crosses tags — try a shorter one */ }
+      }
+    }
+    return false;
+  }
+  function markNode(sec, key, t, replies){
+    if(!key) return false;
+    var el = sec.querySelector('[data-t="' + key.replace(/"/g, '\\"') + '"]');
+    if(!el || el.children.length || !(el.textContent || '').trim()) return false;
+    var r = document.createRange();
+    try {
+      r.selectNodeContents(el);
+      r.surroundContents(decorate(document.createElement('mark'), t, replies));
+      return true;
+    } catch(e){ return false; }
+  }
+  function applyHighlights(){
+    clearHighlights();
+    rows.filter(function(r){ return !r.parent_id && r.section; })
+        .forEach(function(t){
+          var sec = document.getElementById(secId(t.section));
+          if(!sec) return;
+          var replies = rows.filter(function(r){ return r.parent_id === t.id; }).length;
+          if(!markQuote(sec, t.quote, t, replies)) markNode(sec, secAnchor(t.section), t, replies);
+        });
+  }
+
+  /* ---------- navigation ---------- */
+  function openThread(id, el){
+    pending = { thread: id };
+    document.querySelectorAll('mark.ncc-hl.on').forEach(function(m){ m.classList.remove('on'); });
+    if(el) el.classList.add('on');
+    open('thread', el || null);
+    render();
+    place();
+  }
+
+  function goTo(sectionValue, th){
+    var cid = th && th.getAttribute('data-id');
+    var mk = cid && document.querySelector('mark.ncc-hl[data-cid="' + cid + '"]');
+    if(mk){
+      mk.scrollIntoView({ behavior:'smooth', block:'center' });
+      mk.classList.add('ncc-flash');
+      setTimeout(function(){ mk.classList.remove('ncc-flash'); }, 2400);
+      setTimeout(function(){ if(isOpen()) openThread(cid, mk); }, 500);
+      return;
+    }
+    var sec = document.getElementById(secId(sectionValue));
+    if(sec) sec.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  /* ---------- events ---------- */
+  function wire(){
     document.addEventListener('click', function(e){
       var t = e.target;
-      if(!t || !t.closest || !t.closest('.ncc-panel')) return;
-      if(t.dataset && t.dataset.reply){
-        pending = { parent: t.dataset.reply, parentName: t.dataset.who };
-        paintCtx();
-        panel.querySelector('.ncc-text').focus();
-      } else if(t.dataset && t.dataset.res){
-        resolve(t.dataset.res, t.dataset.st === '1');
-      } else if(t.dataset && t.dataset.go){
-        goTo(t.dataset.go, t.closest('.ncc-th'));
+      if(!t || !t.closest) return;
+
+      var mk = t.closest('mark.ncc-hl');
+      if(mk){ openThread(mk.getAttribute('data-cid'), mk); return; }
+
+      if(t.closest('.ncc-pop')){
+        if(t.dataset && t.dataset.reply){
+          pending = { thread: pending && pending.thread, parent: t.dataset.reply, parentName: t.dataset.who };
+          paintCtx();
+          pop.querySelector('.ncc-text').focus();
+        } else if(t.dataset && t.dataset.res){
+          resolve(t.dataset.res, t.dataset.st === '1');
+        } else if(t.dataset && t.dataset.go){
+          goTo(t.dataset.go, t.closest('.ncc-th'));
+        }
+        return;
       }
+
+      if(t.closest('.ncc-btn') || t.closest('.ncc-bub')) return;
+      if(isOpen()) close();                              /* click anywhere else closes it */
+    });
+
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && isOpen()) close();
+    });
+
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+
+    /* the page repaints itself when the view or the language changes */
+    document.addEventListener('click', function(e){
+      if(e.target.closest && e.target.closest('.gtmnav, .navrow, [data-lang], .langsw, [data-switch]'))
+        setTimeout(applyHighlights, 400);
     });
   }
 
-  function goTo(id, th){
-    var sec = document.getElementById(id);
-    if(!sec) return;
-    sec.scrollIntoView({ behavior:'smooth', block:'start' });
-    var q = th && th.querySelector('.ncc-q');
-    if(q) highlight(sec, q.textContent);
-  }
-
-  function highlight(sec, quote){
-    quote = (quote || '').trim();
-    if(quote.length < 6) return;
-    var walk = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT, null);
-    var n;
-    while((n = walk.nextNode())){
-      if(n.nodeValue && n.nodeValue.indexOf(quote.slice(0, 40)) >= 0){
-        var p = n.parentElement;
-        if(!p) return;
-        p.classList.add('ncc-flash');
-        setTimeout(function(){ p.classList.remove('ncc-flash'); }, 2400);
-        return;
-      }
-    }
-  }
-
-  /* ---------- selection bubble ---------- */
+  /* selection → bubble → new comment */
   var bubble;
   function initBubble(){
     document.addEventListener('mouseup', function(e){
-      if(e.target.closest && e.target.closest('.ncc-panel, .ncc-bub')) return;
+      if(e.target.closest && e.target.closest('.ncc-pop, .ncc-bub, .ncc-btn')) return;
       setTimeout(function(){
         var sel = window.getSelection();
         var text = sel ? String(sel).replace(/\s+/g,' ').trim() : '';
         if(bubble){ bubble.remove(); bubble = null; }
-        if(!text || text.length < 4) return;
-        if(!sel.rangeCount) return;
+        if(!text || text.length < 4 || !sel.rangeCount) return;
         var sec = sectionOf(sel.getRangeAt(0).startContainer);
         if(!sec.id) return;
         var r = sel.getRangeAt(0).getBoundingClientRect();
@@ -4405,8 +4628,9 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
         bubble.addEventListener('click', function(){
           pending = { quote: text.slice(0,300), section: sec.id, label: sec.label };
           paintCtx();
-          toggle(true);
-          panel.querySelector('.ncc-text').focus();
+          open('new', null, { top:r.top, left:r.left, right:r.right, bottom:r.bottom });
+          render();
+          pop.querySelector('.ncc-text').focus();
           bubble.remove(); bubble = null;
         });
         document.body.appendChild(bubble);
@@ -4424,25 +4648,27 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
       .then(function(res){
         if(res.error){ console.error('[comments]', res.error); return; }
         rows = res.data || [];
-        render();
+        if(isOpen()) render();
+        count();
+        applyHighlights();
       });
   }
 
   function err(msg){
-    var p = panel.querySelector('.ncc-err');
+    var p = pop.querySelector('.ncc-err');
     p.textContent = msg || '';
     p.hidden = !msg;
   }
 
   function send(){
-    var name = panel.querySelector('.ncc-name').value.trim();
-    var text = panel.querySelector('.ncc-text').value.trim();
-    var code = panel.querySelector('.ncc-code').value.trim();
+    var name = pop.querySelector('.ncc-name').value.trim();
+    var text = pop.querySelector('.ncc-text').value.trim();
+    var code = pop.querySelector('.ncc-code').value.trim();
     if(!name) return err('Please write your name.');
     if(!text) return err('The comment is empty.');
     if(!code) return err('You need the access code to post.');
     err('');
-    var btn = panel.querySelector('.ncc-send');
+    var btn = pop.querySelector('.ncc-send');
     btn.disabled = true; btn.textContent = 'Posting…';
 
     sb.rpc('nc_add_comment', {
@@ -4455,27 +4681,47 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
       p_body: text,
       p_parent: (pending && pending.parent) || null
     }).then(function(res){
-      btn.disabled = false; btn.textContent = 'Post comment';
+      btn.disabled = false; btn.textContent = 'Post';
       if(res.error){
         err(/code/i.test(res.error.message || '') ? 'Wrong access code.' : 'Could not post: ' + res.error.message);
         return;
       }
       localStorage.setItem(LS_NAME, name);
       localStorage.setItem(LS_CODE, code);
-      panel.querySelector('.ncc-text').value = '';
-      pending = null; paintCtx();
-      load();
+      paintIdentity();
+      pop.querySelector('.ncc-text').value = '';
+      var keep = pending && pending.thread;
+      pending = keep ? { thread: keep } : null;
+      paintCtx();
+      load().then(function(){ if(isOpen()){ render(); place(); } });
     });
   }
 
   function resolve(id, state){
-    var code = (panel.querySelector('.ncc-code').value || localStorage.getItem(LS_CODE) || '').trim();
+    var code = (pop.querySelector('.ncc-code').value || localStorage.getItem(LS_CODE) || '').trim();
     if(!code){ err('You need the access code to resolve a comment.'); return; }
     sb.rpc('nc_resolve_comment', { p_code: code, p_id: id, p_state: state })
       .then(function(res){
         if(res.error){ err('Could not update: ' + res.error.message); return; }
-        err(''); load();
+        err('');
+        load().then(function(){ if(isOpen()){ render(); place(); } });
       });
+  }
+
+  /* the page rewrites its own text (EN/ES switch, ?edit=1 editor).
+     Take our highlights out of the way first, then put them back. */
+  var rehl = null;
+  function hookRepaint(){
+    var prev = window.__ncSetText;
+    window.__ncSetText = function(el, v){
+      if(el && el.querySelector && el.querySelector('mark.ncc-hl')){
+        clearHighlights(el);
+        clearTimeout(rehl);
+        rehl = setTimeout(applyHighlights, 250);
+      }
+      if(prev) return prev(el, v);
+      if(el && !el.children.length) el.textContent = v;
+    };
   }
 
   /* ---------- mount ---------- */
@@ -4486,7 +4732,15 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
       b.type = 'button';
       b.className = 'ncc-btn';
       b.innerHTML = 'Comments<span class="ncc-n" data-z="1">0</span>';
-      b.addEventListener('click', function(){ toggle(); });
+      b.addEventListener('click', function(){
+        if(isOpen() && mode === 'list'){ close(); return; }
+        pending = null;
+        paintCtx();
+        open('list');
+        render();
+        place();
+        localStorage.setItem(LS_SEEN, String(Date.now()));
+      });
       var lang = nav.querySelector('.langsw');
       if(lang) nav.insertBefore(b, lang); else nav.appendChild(b);
       btns.push(b);
@@ -4498,14 +4752,13 @@ background:transparent;color:inherit;font-family:'Chakra Petch',sans-serif;font-
     s.src = LIB;
     s.onload = function(){
       sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
-      style(); buildPanel(); mountButtons(); initBubble();
+      style(); build(); mountButtons(); initBubble(); wire(); hookRepaint();
       load();
       try {
         sb.channel('nc_comments_' + REPORT)
           .on('postgres_changes', { event:'*', schema:'public', table:'nc_comments' }, function(){ load(); })
           .subscribe();
       } catch(e){ console.warn('[comments] realtime unavailable', e); }
-      /* fallback: refresh on a short timer and whenever the tab comes back */
       setInterval(function(){ if(!document.hidden) load(); }, 15000);
       document.addEventListener('visibilitychange', function(){ if(!document.hidden) load(); });
       window.addEventListener('focus', load);
